@@ -1,0 +1,25 @@
+{
+  "modes": {
+    "easy": {
+      "description": "Relaxed flood, fewer pairs needed.",
+      "required_pairs_total": 10,
+      "flood_rise_speed_blocks_per_second": 0.02,
+      "flood_start_delay_seconds": 45,
+      "animal_spawn_multiplier": 1.0
+    },
+    "normal": {
+      "description": "Default challenge - save all 23 animal pairs!",
+      "required_pairs_total": 23,
+      "flood_rise_speed_blocks_per_second": 0.04,
+      "flood_start_delay_seconds": 30,
+      "animal_spawn_multiplier": 1.0
+    },
+    "hard": {
+      "description": "Fast flood, race against time!",
+      "required_pairs_total": 23,
+      "flood_rise_speed_blocks_per_second": 0.06,
+      "flood_start_delay_seconds": 20,
+      "animal_spawn_multiplier": 1.0
+    }
+  }
+}

@@ -1,0 +1,64 @@
+{
+  "version": 1,
+  "palette": {
+    "wood_dark": [
+      90,
+      60,
+      30
+    ],
+    "wood_light": [
+      150,
+      100,
+      50
+    ],
+    "parchment": [
+      230,
+      216,
+      185
+    ],
+    "rope": [
+      194,
+      164,
+      104
+    ],
+    "water": [
+      40,
+      120,
+      200
+    ],
+    "gold": [
+      225,
+      190,
+      80
+    ]
+  },
+  "fonts": {
+    "primary": "default_sans",
+    "title": "default_serif_bold"
+  },
+  "panels": {
+    "default": "assets/ui/ark_frame_panel.png"
+  },
+  "buttons": {
+    "primary": {
+      "background": "assets/ui/button_primary.png",
+      "text_color": [
+        30,
+        15,
+        5
+      ]
+    }
+  },
+  "icons": {
+    "animal_pair": "assets/ui/icon_animal_pair.png",
+    "flood": "assets/ui/icon_flood.png",
+    "timer": "assets/ui/icon_timer.png",
+    "pair_saved": "assets/ui/icon_pair_saved.png"
+  },
+  "bars": {
+    "flood": {
+      "background": "assets/ui/bar_flood_bg.png",
+      "fill": "assets/ui/bar_flood_fill.png"
+    }
+  }
+}

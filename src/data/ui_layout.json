@@ -1,0 +1,61 @@
+{
+  "hud_elements": [
+    {
+      "id": "pairs_counter",
+      "type": "text",
+      "anchor": "bottom_center",
+      "offset": [
+        0,
+        16
+      ],
+      "text_template": "Pairs Collected: {current}/{required}"
+    },
+    {
+      "id": "timer",
+      "type": "text",
+      "anchor": "top_right",
+      "offset": [
+        -16,
+        16
+      ],
+      "text_template": "Time: {minutes}:{seconds}"
+    },
+    {
+      "id": "flood_meter",
+      "type": "bar",
+      "anchor": "top_left",
+      "offset": [
+        16,
+        16
+      ],
+      "value_source": "flood_progress"
+    },
+    {
+      "id": "powerup_bar",
+      "type": "icon_row",
+      "anchor": "bottom_left",
+      "offset": [
+        16,
+        16
+      ],
+      "max_icons": 3
+    }
+  ],
+  "notifications": {
+    "success_pair": {
+      "text": "Pair Saved!",
+      "color": "gold",
+      "duration_seconds": 2.0
+    },
+    "wrong_pair": {
+      "text": "You need two of the same animal!",
+      "color": "red",
+      "duration_seconds": 2.0
+    },
+    "flood_warning": {
+      "text": "The flood is rising!",
+      "color": "aqua",
+      "duration_seconds": 3.0
+    }
+  }
+}

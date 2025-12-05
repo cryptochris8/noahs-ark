@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(unzip:*)",
+      "mcp__hytopia-mcp__listDocumentation",
+      "mcp__hytopia-mcp__getDocumentation",
+      "mcp__hytopia-mcp__listProjects",
+      "Bash(dir \"C:\\Users\\chris\\Noahs-Ark\")",
+      "mcp__hytopia-mcp__search",
+      "mcp__hytopia-mcp__listProjectFiles",
+      "mcp__hytopia-mcp__readProjectFile",
+      "Bash(npx tsc:*)",
+      "Bash(dir \"C:\\Users\\chris\\Noahs-Ark\\node_modules\\@hytopia.com\\assets\\models\\npcs\")",
+      "Bash(dir \"C:\\Users\\chris\\Noahs-Ark\" /b)",
+      "Bash(git init:*)",
+      "Bash(git add:*)"
+    ]
+  },
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": [
+    "hytopia-mcp"
+  ]
+}

@@ -1,0 +1,22 @@
+# Dependencies
+node_modules/
+
+# Build output
+*.mjs
+dist/
+
+# IDE/Editor
+.cursor/
+.vscode/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Temp/extracted files
+extracted_project/
+*.zip
+
+# Logs
+*.log
+npm-debug.log*

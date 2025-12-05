@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "game_title": "Noah's Ark Rush",
+  "mode": "solo",
+  "required_pairs_total": 23,
+  "max_animals_following": 2,
+  "pair_completion_time_window_seconds": 5,
+  "player": {
+    "base_move_speed": 1.0,
+    "sprint_multiplier": 1.4,
+    "stamina_max": 100,
+    "stamina_drain_per_second": 15,
+    "stamina_recovery_per_second": 10
+  },
+  "flood": {
+    "enabled": true,
+    "start_delay_seconds": 20,
+    "start_height_y": 2,
+    "rise_speed_blocks_per_second": 0.05,
+    "max_height_y": 38,
+    "damage_per_second_below_surface": 999
+  },
+  "animals": {
+    "max_animals_world": 50,
+    "respawn_on_pair_completion": false,
+    "follow_distance": 3.0,
+    "follow_speed_multiplier": 0.9
+  },
+  "powerups": {
+    "enabled": false,
+    "spawn_interval_seconds": 45,
+    "max_active_powerups": 3
+  },
+  "ui": {
+    "show_timer": true,
+    "show_flood_meter": true,
+    "show_pair_breakdown": true
+  },
+  "debug": {
+    "god_mode": false,
+    "show_spawn_markers": true,
+    "show_flood_debug": false
+  }
+}

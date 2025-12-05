@@ -1,0 +1,165 @@
+{
+  "animal_types": [
+    {
+      "id": "sheep",
+      "display_name": "Sheep",
+      "pairs_required": 1,
+      "spawn_tags": ["grassland"],
+      "preferred_tiers": [1, 2]
+    },
+    {
+      "id": "cow",
+      "display_name": "Cow",
+      "pairs_required": 1,
+      "spawn_tags": ["grassland"],
+      "preferred_tiers": [1, 2]
+    },
+    {
+      "id": "pig",
+      "display_name": "Pig",
+      "pairs_required": 1,
+      "spawn_tags": ["grassland"],
+      "preferred_tiers": [1, 2]
+    },
+    {
+      "id": "chicken",
+      "display_name": "Chicken",
+      "pairs_required": 1,
+      "spawn_tags": ["grassland"],
+      "preferred_tiers": [1]
+    },
+    {
+      "id": "horse",
+      "display_name": "Horse",
+      "pairs_required": 1,
+      "spawn_tags": ["grassland"],
+      "preferred_tiers": [2, 3]
+    },
+    {
+      "id": "donkey",
+      "display_name": "Donkey",
+      "pairs_required": 1,
+      "spawn_tags": ["grassland", "rocky"],
+      "preferred_tiers": [2, 3]
+    },
+    {
+      "id": "rabbit",
+      "display_name": "Rabbit",
+      "pairs_required": 1,
+      "spawn_tags": ["grassland", "forest"],
+      "preferred_tiers": [1, 2]
+    },
+    {
+      "id": "fox",
+      "display_name": "Fox",
+      "pairs_required": 1,
+      "spawn_tags": ["forest"],
+      "preferred_tiers": [2]
+    },
+    {
+      "id": "wolf",
+      "display_name": "Wolf",
+      "pairs_required": 1,
+      "spawn_tags": ["forest"],
+      "preferred_tiers": [2, 3]
+    },
+    {
+      "id": "bear",
+      "display_name": "Bear",
+      "pairs_required": 1,
+      "spawn_tags": ["forest", "rocky"],
+      "preferred_tiers": [3]
+    },
+    {
+      "id": "raccoon",
+      "display_name": "Raccoon",
+      "pairs_required": 1,
+      "spawn_tags": ["forest"],
+      "preferred_tiers": [1, 2]
+    },
+    {
+      "id": "beaver",
+      "display_name": "Beaver",
+      "pairs_required": 1,
+      "spawn_tags": ["forest"],
+      "preferred_tiers": [1]
+    },
+    {
+      "id": "ocelot",
+      "display_name": "Ocelot",
+      "pairs_required": 1,
+      "spawn_tags": ["forest"],
+      "preferred_tiers": [2, 3]
+    },
+    {
+      "id": "capybara",
+      "display_name": "Capybara",
+      "pairs_required": 1,
+      "spawn_tags": ["grassland"],
+      "preferred_tiers": [1, 2]
+    },
+    {
+      "id": "turtle",
+      "display_name": "Turtle",
+      "pairs_required": 1,
+      "spawn_tags": ["grassland"],
+      "preferred_tiers": [1]
+    },
+    {
+      "id": "frog",
+      "display_name": "Frog",
+      "pairs_required": 1,
+      "spawn_tags": ["grassland"],
+      "preferred_tiers": [1]
+    },
+    {
+      "id": "lizard",
+      "display_name": "Lizard",
+      "pairs_required": 1,
+      "spawn_tags": ["rocky"],
+      "preferred_tiers": [1, 2]
+    },
+    {
+      "id": "penguin",
+      "display_name": "Penguin",
+      "pairs_required": 1,
+      "spawn_tags": ["rocky"],
+      "preferred_tiers": [2, 3]
+    },
+    {
+      "id": "flamingo",
+      "display_name": "Flamingo",
+      "pairs_required": 1,
+      "spawn_tags": ["grassland"],
+      "preferred_tiers": [1, 2]
+    },
+    {
+      "id": "peacock",
+      "display_name": "Peacock",
+      "pairs_required": 1,
+      "spawn_tags": ["grassland", "forest"],
+      "preferred_tiers": [2, 3]
+    },
+    {
+      "id": "bat",
+      "display_name": "Bat",
+      "pairs_required": 1,
+      "spawn_tags": ["rocky", "forest"],
+      "preferred_tiers": [3]
+    },
+    {
+      "id": "crab",
+      "display_name": "Crab",
+      "pairs_required": 1,
+      "spawn_tags": ["grassland"],
+      "preferred_tiers": [1]
+    },
+    {
+      "id": "dog",
+      "display_name": "Dog",
+      "pairs_required": 1,
+      "spawn_tags": ["grassland"],
+      "preferred_tiers": [2, 3]
+    }
+  ]
+}
