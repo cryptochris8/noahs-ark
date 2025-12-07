@@ -1,0 +1,106 @@
+[
+  {
+    "id": "flood-plain-west",
+    "x": -30,
+    "z": -50,
+    "tier": 1,
+    "biome": "grassland",
+    "y": 6
+  },
+  {
+    "id": "flood-plain-east",
+    "x": 30,
+    "z": -50,
+    "tier": 1,
+    "biome": "grassland",
+    "y": 6
+  },
+  {
+    "id": "flood-plain-center",
+    "x": 0,
+    "z": -60,
+    "tier": 1,
+    "biome": "grassland",
+    "y": 6
+  },
+  {
+    "id": "river-west-bank",
+    "x": -50,
+    "z": -40,
+    "tier": 1,
+    "biome": "grassland",
+    "y": 6
+  },
+  {
+    "id": "river-east-bank",
+    "x": 50,
+    "z": -40,
+    "tier": 1,
+    "biome": "grassland",
+    "y": 9
+  },
+  {
+    "id": "village-area",
+    "x": 25,
+    "z": 0,
+    "tier": 2,
+    "biome": "grassland",
+    "y": 14
+  },
+  {
+    "id": "forest-edge",
+    "x": -35,
+    "z": -10,
+    "tier": 2,
+    "biome": "forest",
+    "y": 4
+  },
+  {
+    "id": "forest-deep",
+    "x": -45,
+    "z": 15,
+    "tier": 2,
+    "biome": "forest",
+    "y": 4
+  },
+  {
+    "id": "central-terrace",
+    "x": 0,
+    "z": -20,
+    "tier": 2,
+    "biome": "grassland",
+    "y": 11
+  },
+  {
+    "id": "east-terrace",
+    "x": 40,
+    "z": 10,
+    "tier": 2,
+    "biome": "grassland",
+    "y": 4
+  },
+  {
+    "id": "highland-west",
+    "x": -40,
+    "z": 40,
+    "tier": 3,
+    "biome": "rocky",
+    "y": 18
+  },
+  {
+    "id": "highland-east",
+    "x": 40,
+    "z": 40,
+    "tier": 3,
+    "biome": "rocky",
+    "y": 20
+  },
+  {
+    "id": "near-ark",
+    "x": 0,
+    "z": 35,
+    "tier": 3,
+    "biome": "rocky",
+    "y": 19
+  }
+]
