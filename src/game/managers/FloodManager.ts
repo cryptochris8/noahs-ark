@@ -12,10 +12,17 @@ import {
   type World,
 } from 'hytopia';
 
-import GameConfig, { type DifficultyKey } from '../GameConfig';
+import GameConfig, { type DifficultyKey, type SwimmingConfig } from '../GameConfig';
 import FloodVisual from './FloodVisual';
 
 export type FloodEventCallback = (currentHeight: number, maxHeight: number) => void;
+
+// Track swimming state per player
+interface PlayerSwimmingState {
+  isSwimming: boolean;
+  currentStamina: number;
+  lastMessageTime: number;
+}
 
 export default class FloodManager {
   private _world: World;
@@ -33,6 +40,11 @@ export default class FloodManager {
   private _onFloodRise: FloodEventCallback | null = null;
   private _onFloodWarning: (() => void) | null = null;
 
+  // Swimming system
+  private _swimmingConfig: SwimmingConfig;
+  private _playerSwimmingStates: Map<string, PlayerSwimmingState> = new Map();
+  private _maxStamina: number;
+
   constructor(world: World, difficulty: DifficultyKey = 'normal') {
     this._world = world;
 
@@ -44,6 +56,10 @@ export default class FloodManager {
     this._riseSpeed = difficultyConfig.flood_rise_speed_blocks_per_second;
     this._startDelay = difficultyConfig.flood_start_delay_seconds;
     this._damagePerSecond = config.flood.damage_per_second_below_surface;
+
+    // Swimming configuration
+    this._swimmingConfig = config.swimming;
+    this._maxStamina = config.player.stamina_max;
 
     // Create flood visual (water surface effect)
     this._floodVisual = new FloodVisual(world, this._currentHeight);
@@ -235,19 +251,163 @@ export default class FloodManager {
     const playerEntities = this._world.entityManager.getAllPlayerEntities();
 
     playerEntities.forEach(playerEntity => {
-      if (playerEntity.position.y < this._currentHeight) {
+      const isSubmerged = playerEntity.position.y < this._currentHeight;
+      const isNearSurface = playerEntity.position.y < this._currentHeight + this._swimmingConfig.surface_threshold;
+
+      if (this._swimmingConfig.enabled && isNearSurface) {
+        // Apply swimming physics
+        this._applySwimmingPhysics(playerEntity, isSubmerged);
+      } else if (isSubmerged) {
+        // Fallback to old behavior if swimming disabled
         this._applyFloodDamage(playerEntity);
+      } else {
+        // Player is above water - recover stamina
+        this._recoverPlayerStamina(playerEntity);
       }
     });
   }
 
+  /**
+   * Get or create swimming state for a player
+   */
+  private _getPlayerSwimmingState(playerId: string): PlayerSwimmingState {
+    if (!this._playerSwimmingStates.has(playerId)) {
+      this._playerSwimmingStates.set(playerId, {
+        isSwimming: false,
+        currentStamina: this._maxStamina,
+        lastMessageTime: 0,
+      });
+    }
+    return this._playerSwimmingStates.get(playerId)!;
+  }
+
+  /**
+   * Apply swimming physics to a player in the water
+   */
+  private _applySwimmingPhysics(playerEntity: PlayerEntity, isSubmerged: boolean): void {
+    const player = playerEntity.player;
+    const state = this._getPlayerSwimmingState(player.id);
+    const now = Date.now();
+
+    // Mark as swimming
+    if (!state.isSwimming) {
+      state.isSwimming = true;
+      // Initial message when entering water
+      if (now - state.lastMessageTime > 3000) {
+        this._world.chatManager.sendPlayerMessage(
+          player,
+          'You are swimming! Get to higher ground before you tire out!',
+          '00AAFF'
+        );
+        state.lastMessageTime = now;
+      }
+    }
+
+    // Apply buoyancy - gentle upward force to keep player afloat
+    // Only apply buoyancy when fully submerged
+    if (isSubmerged) {
+      playerEntity.applyImpulse({
+        x: 0,
+        y: this._swimmingConfig.buoyancy_impulse * 0.1, // Scale for per-tick application
+        z: 0
+      });
+    }
+
+    // Drain stamina while swimming (scaled for 100ms tick rate)
+    const staminaDrain = this._swimmingConfig.stamina_drain_per_second * 0.1;
+    state.currentStamina = Math.max(0, state.currentStamina - staminaDrain);
+
+    // Warning messages at stamina thresholds
+    if (state.currentStamina <= 30 && state.currentStamina > 20 && now - state.lastMessageTime > 2000) {
+      this._world.chatManager.sendPlayerMessage(
+        player,
+        'Your stamina is running low! Find dry land!',
+        'FFAA00'
+      );
+      state.lastMessageTime = now;
+    } else if (state.currentStamina <= 20 && state.currentStamina > 0 && now - state.lastMessageTime > 1500) {
+      this._world.chatManager.sendPlayerMessage(
+        player,
+        'WARNING: Almost out of stamina!',
+        'FF5500'
+      );
+      state.lastMessageTime = now;
+    }
+
+    // Apply drowning damage when stamina depleted
+    if (state.currentStamina <= this._swimmingConfig.drowning_starts_at_stamina) {
+      // Player is drowning - apply damage and stronger upward push
+      if (now - state.lastMessageTime > 1000) {
+        this._world.chatManager.sendPlayerMessage(
+          player,
+          'DROWNING! You are taking damage!',
+          'FF0000'
+        );
+        state.lastMessageTime = now;
+      }
+
+      // Apply a stronger upward impulse to help them escape
+      playerEntity.applyImpulse({ x: 0, y: this._swimmingConfig.buoyancy_impulse * 0.3, z: 0 });
+
+      // Note: Actual health damage would require Hytopia health system
+      // For now, we use the impulse to push them up as a survival mechanic
+    }
+  }
+
+  /**
+   * Recover stamina when player is out of water
+   */
+  private _recoverPlayerStamina(playerEntity: PlayerEntity): void {
+    const player = playerEntity.player;
+    const state = this._getPlayerSwimmingState(player.id);
+
+    if (state.isSwimming) {
+      // Just got out of water
+      state.isSwimming = false;
+
+      if (state.currentStamina < this._maxStamina * 0.5) {
+        this._world.chatManager.sendPlayerMessage(
+          player,
+          'You made it to dry land! Recovering stamina...',
+          '00FF00'
+        );
+      }
+    }
+
+    // Recover stamina while on dry land (scaled for 100ms tick rate)
+    const recovery = GameConfig.instance.player.stamina_recovery_per_second * 0.1;
+    state.currentStamina = Math.min(this._maxStamina, state.currentStamina + recovery);
+  }
+
+  /**
+   * Clean up swimming state for a player (call when player leaves)
+   */
+  public removePlayerSwimmingState(playerId: string): void {
+    this._playerSwimmingStates.delete(playerId);
+  }
+
+  /**
+   * Get a player's current swimming stamina (for UI)
+   */
+  public getPlayerSwimmingStamina(playerId: string): number {
+    const state = this._playerSwimmingStates.get(playerId);
+    return state ? state.currentStamina : this._maxStamina;
+  }
+
+  /**
+   * Check if a player is currently swimming
+   */
+  public isPlayerSwimming(playerId: string): boolean {
+    const state = this._playerSwimmingStates.get(playerId);
+    return state ? state.isSwimming : false;
+  }
+
   private _applyFloodDamage(entity: Entity): void {
-    // For now, we'll use a simple approach - apply impulse to push them up
-    // and send a damage notification to the player
+    // Fallback behavior when swimming is disabled
+    // Applies instant damage/impulse like the original implementation
 
     if (entity instanceof PlayerEntity) {
       // Push player up and deal damage (effectively instant death with 999 damage)
-      // For a more forgiving version, we could respawn them at a safe location
       const player = entity.player;
 
       // Apply upward impulse to try to save them

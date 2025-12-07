@@ -69,6 +69,9 @@ export default class AnimalEntity extends Entity {
   private _wanderTarget: Vector3Like | null = null;
   private _lastPathfindTarget: Vector3Like | null = null;
   private _pathfindCooldown: number = 0;
+  private _currentFloodHeight: number = 0;
+  private _isFleeingFlood: boolean = false;
+  private _fleeTarget: Vector3Like | null = null;
 
   constructor(options: AnimalEntityOptions) {
     const modelUri = ANIMAL_MODELS[options.animalType] || DEFAULT_ANIMAL_MODEL;
@@ -149,6 +152,98 @@ export default class AnimalEntity extends Entity {
     return this.animalType === other.animalType && this !== other;
   }
 
+  /**
+   * Update the current flood height - animal will flee if too close to water
+   */
+  public updateFloodLevel(floodHeight: number): void {
+    this._currentFloodHeight = floodHeight;
+
+    // Don't flee if following a player - player leads them to safety
+    if (this._isFollowing) return;
+
+    // Check if we need to flee (within 5 blocks of flood level)
+    const myY = this.position.y;
+    const dangerZone = floodHeight + 5;
+
+    if (myY < dangerZone && !this._isFleeingFlood) {
+      this._startFleeingFlood();
+    }
+  }
+
+  /**
+   * Start fleeing from the flood to higher ground
+   */
+  private _startFleeingFlood(): void {
+    if (this._isFleeingFlood || !this.isSpawned || !this.world) return;
+
+    this._isFleeingFlood = true;
+    this._clearIdleWander();
+
+    // Find a safe position - move toward higher ground (positive Z and higher Y)
+    const myPos = this.position;
+    const safeHeight = this._currentFloodHeight + 15; // Target well above flood
+
+    // Calculate flee target - move toward the ark area (higher Z) and uphill
+    this._fleeTarget = {
+      x: myPos.x + (Math.random() - 0.5) * 10, // Some random lateral movement
+      y: Math.max(myPos.y + 5, safeHeight),     // Move up
+      z: myPos.z + 15 + Math.random() * 10,     // Move toward higher ground (ark direction)
+    };
+
+    // Start walking animation
+    this.stopModelAnimations(['idle']);
+    this.startModelLoopedAnimations(['walk']);
+
+    // Use pathfinding to get to safety
+    const pathFound = this.pathfindingController.pathfind(this._fleeTarget, this._followSpeed * 1.2, {
+      maxJump: 3,  // Allow bigger jumps when fleeing
+      maxFall: 4,
+      pathfindCompleteCallback: () => {
+        this._onFleeComplete();
+      },
+      pathfindAbortCallback: () => {
+        // Try again with a different target
+        this._isFleeingFlood = false;
+        this._fleeTarget = null;
+        // Will retry on next flood update
+      },
+    });
+
+    if (!pathFound) {
+      // Fallback: simple movement uphill
+      this.pathfindingController.move(this._fleeTarget, this._followSpeed * 1.2, {
+        moveCompleteCallback: () => {
+          this._onFleeComplete();
+        },
+      });
+    }
+
+    this.pathfindingController.face(this._fleeTarget, 5);
+  }
+
+  /**
+   * Called when flee pathfinding completes
+   */
+  private _onFleeComplete(): void {
+    this._fleeTarget = null;
+
+    // Check if we're safe now
+    const myY = this.position.y;
+    const dangerZone = this._currentFloodHeight + 5;
+
+    if (myY < dangerZone) {
+      // Still not safe, keep fleeing
+      this._isFleeingFlood = false;
+      this._startFleeingFlood();
+    } else {
+      // We're safe, return to normal behavior
+      this._isFleeingFlood = false;
+      this.stopModelAnimations(['walk']);
+      this.startModelLoopedAnimations(['idle']);
+      this._startIdleWander();
+    }
+  }
+
   public override spawn(world: World, position: Vector3Like): void {
     super.spawn(world, position);
     this._startIdleWander();
@@ -164,8 +259,26 @@ export default class AnimalEntity extends Entity {
 
     if (this._isFollowing && this._followingPlayer) {
       this._updateFollowBehavior();
+    } else if (this._isFleeingFlood && this._fleeTarget) {
+      // Fleeing takes priority - handled by pathfinding callbacks
+      this._updateFleeBehavior();
     } else if (this._wanderTarget) {
       this._updateWanderBehavior();
+    }
+  }
+
+  private _updateFleeBehavior(): void {
+    if (!this._fleeTarget) return;
+
+    // Check if we reached the flee target
+    const myPos = this.position;
+    const dx = this._fleeTarget.x - myPos.x;
+    const dz = this._fleeTarget.z - myPos.z;
+    const distanceSquared = dx * dx + dz * dz;
+
+    // If we're close to target or above the danger zone, complete the flee
+    if (distanceSquared < 4) {
+      this._onFleeComplete();
     }
   }
 

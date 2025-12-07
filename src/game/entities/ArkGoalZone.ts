@@ -10,8 +10,10 @@ import {
   BlockType,
   Audio,
   RigidBodyType,
+  Quaternion,
   type World,
   type Vector3Like,
+  type QuaternionLike,
 } from 'hytopia';
 
 import AnimalEntity from './AnimalEntity';
@@ -21,16 +23,19 @@ export type PairCompletedCallback = (animalType: string, animal1: AnimalEntity, 
 export type WrongPairCallback = (animal: AnimalEntity) => void;
 
 export interface ArkGoalZoneOptions {
-  position: Vector3Like;
+  position: Vector3Like;         // Goal zone/drop-off position
+  arkModelPosition?: Vector3Like; // Separate position for the Ark model (if different from goal zone)
   size?: Vector3Like;
   modelUri?: string;
   modelScale?: number;
   modelOffset?: Vector3Like;
+  modelRotationY?: number; // Rotation in degrees around Y axis
 }
 
 export default class ArkGoalZone {
   private _world: World;
   private _position: Vector3Like;
+  private _arkModelPosition: Vector3Like;
   private _size: Vector3Like;
   private _collider: Collider | null = null;
   private _animalsInZone: Set<AnimalEntity> = new Set();
@@ -43,14 +48,17 @@ export default class ArkGoalZone {
   private _modelUri: string | null;
   private _modelScale: number;
   private _modelOffset: Vector3Like;
+  private _modelRotationY: number;
 
   constructor(world: World, options: ArkGoalZoneOptions) {
     this._world = world;
     this._position = options.position;
+    this._arkModelPosition = options.arkModelPosition ?? options.position; // Default to same as goal zone
     this._size = options.size ?? { x: 8, y: 4, z: 8 };
     this._modelUri = options.modelUri ?? null;
     this._modelScale = options.modelScale ?? 1;
     this._modelOffset = options.modelOffset ?? { x: 0, y: 0, z: 0 };
+    this._modelRotationY = options.modelRotationY ?? 0;
 
     // Create success/fail audio
     // TODO: Replace with custom ark horn sound
@@ -121,13 +129,15 @@ export default class ArkGoalZone {
         },
       });
 
+      // Use ark model position (separate from goal zone position)
       const modelPosition = {
-        x: this._position.x + this._modelOffset.x,
-        y: this._position.y + this._modelOffset.y,
-        z: this._position.z + this._modelOffset.z,
+        x: this._arkModelPosition.x + this._modelOffset.x,
+        y: this._arkModelPosition.y + this._modelOffset.y,
+        z: this._arkModelPosition.z + this._modelOffset.z,
       };
 
-      this._arkModelEntity.spawn(this._world, modelPosition);
+      const rotation = Quaternion.fromEuler(0, this._modelRotationY, 0);
+      this._arkModelEntity.spawn(this._world, modelPosition, rotation);
     }
   }
 

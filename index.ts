@@ -13,7 +13,16 @@ import {
   PlayerEvent,
 } from 'hytopia';
 
-import worldMap from './assets/map.json';
+// Map selection via environment variable (default: plains-of-shinar)
+const MAP_NAME = process.env.MAP_NAME || 'plains-of-shinar';
+
+// Dynamic map loading
+const worldMap = MAP_NAME === 'plains-of-shinar'
+  ? require('./assets/plains-of-shinar.json')
+  : require('./assets/map.json');
+
+console.log(`Loading map: ${MAP_NAME}`);
+
 import GameManager from './src/game/GameManager';
 import GamePlayerEntity from './src/game/entities/GamePlayerEntity';
 

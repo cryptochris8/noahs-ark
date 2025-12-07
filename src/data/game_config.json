@@ -20,9 +20,18 @@
     "max_height_y": 38,
     "damage_per_second_below_surface": 999
   },
+  "swimming": {
+    "enabled": true,
+    "buoyancy_impulse": 4.0,
+    "movement_speed_multiplier": 0.5,
+    "stamina_drain_per_second": 12,
+    "drowning_damage_per_second": 20,
+    "drowning_starts_at_stamina": 0,
+    "surface_threshold": 1.5
+  },
   "animals": {
-    "max_animals_world": 50,
-    "respawn_on_pair_completion": false,
+    "max_animals_world": 100,
+    "respawn_on_pair_completion": true,
     "follow_distance": 3.0,
     "follow_speed_multiplier": 0.9
   },

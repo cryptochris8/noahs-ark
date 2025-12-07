@@ -1,10 +1,8 @@
 /**
- * FloodVisual - Test implementation for visual flood water effect
+ * FloodVisual - Visual flood water effect using a large transparent block entity
  *
- * This is a minimal test to verify:
- * 1. Block entity with opacity works
- * 2. Large-ish block entity renders correctly
- * 3. Position updates work for rising water
+ * This creates a large semi-transparent water surface that rises with the flood.
+ * Uses a single entity for performance rather than many individual water blocks.
  */
 
 import {
@@ -13,15 +11,32 @@ import {
   type World,
 } from 'hytopia';
 
+// Map configuration based on environment variable
+const MAP_NAME = process.env.MAP_NAME || 'plains-of-shinar';
+
+// Map-specific flood visual dimensions
+const MAP_DIMENSIONS: Record<string, { halfWidth: number; halfDepth: number }> = {
+  'plains-of-shinar': {
+    halfWidth: 80,   // X: -80 to +80 (covers 150x150 map with margin)
+    halfDepth: 80,   // Z: -80 to +80
+  },
+  'original': {
+    halfWidth: 50,   // X: -50 to +50
+    halfDepth: 60,   // Z: -60 to +60
+  },
+};
+
+const currentMapDimensions = MAP_DIMENSIONS[MAP_NAME] || MAP_DIMENSIONS['plains-of-shinar'];
+
 export default class FloodVisual {
   private _world: World;
   private _waterEntity: Entity | null = null;
   private _currentHeight: number;
   private _isSpawned: boolean = false;
 
-  // Configuration - start conservative, can adjust after testing
-  private readonly MAP_HALF_WIDTH = 50;   // X: -50 to +50
-  private readonly MAP_HALF_DEPTH = 60;   // Z: -60 to +60
+  // Configuration - map-specific dimensions
+  private readonly MAP_HALF_WIDTH = currentMapDimensions.halfWidth;
+  private readonly MAP_HALF_DEPTH = currentMapDimensions.halfDepth;
   private readonly WATER_THICKNESS = 0.5; // Thin horizontal plane
   private readonly WATER_OPACITY = 0.6;   // Semi-transparent
 

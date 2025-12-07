@@ -227,4 +227,14 @@ export default class AnimalManager {
   public resetPairsCollected(): void {
     this._pairsCollected.clear();
   }
+
+  /**
+   * Update all animals with the current flood level
+   * Animals will flee to higher ground if they're too close to the water
+   */
+  public updateFloodLevel(floodHeight: number): void {
+    this._animals.forEach(animal => {
+      animal.updateFloodLevel(floodHeight);
+    });
+  }
 }

@@ -23,6 +23,16 @@ export interface FloodConfig {
   damage_per_second_below_surface: number;
 }
 
+export interface SwimmingConfig {
+  enabled: boolean;
+  buoyancy_impulse: number;
+  movement_speed_multiplier: number;
+  stamina_drain_per_second: number;
+  drowning_damage_per_second: number;
+  drowning_starts_at_stamina: number;
+  surface_threshold: number;
+}
+
 export interface AnimalsConfig {
   max_animals_world: number;
   respawn_on_pair_completion: boolean;
@@ -58,6 +68,7 @@ class GameConfig {
   public readonly pairCompletionTimeWindowSeconds: number;
   public readonly player: PlayerConfig;
   public readonly flood: FloodConfig;
+  public readonly swimming: SwimmingConfig;
   public readonly animals: AnimalsConfig;
   public readonly animalTypes: AnimalType[];
   public readonly difficultyModes: Record<DifficultyKey, DifficultyMode>;
@@ -70,6 +81,7 @@ class GameConfig {
     this.pairCompletionTimeWindowSeconds = gameConfigData.pair_completion_time_window_seconds;
     this.player = gameConfigData.player;
     this.flood = gameConfigData.flood;
+    this.swimming = gameConfigData.swimming;
     this.animals = gameConfigData.animals;
     this.animalTypes = animalsData.animal_types;
     this.difficultyModes = wavesData.modes as Record<DifficultyKey, DifficultyMode>;

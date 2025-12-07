@@ -25,14 +25,46 @@ export enum GameState {
   DEFEAT = 'defeat',
 }
 
-// Ark position - should match the map
-const ARK_POSITION: Vector3Like = { x: 0, y: 35, z: 20 };
+// Map configuration based on environment variable
+const MAP_NAME = process.env.MAP_NAME || 'plains-of-shinar';
+
+// Map-specific configurations
+const MAP_CONFIGS: Record<string, {
+  arkPosition: Vector3Like;      // Where the Ark model sits
+  goalZonePosition: Vector3Like; // Where players deliver animals (drop-off platform)
+  playerSpawn: Vector3Like;
+  arkModelOffset: Vector3Like;
+  arkModelRotationY: number; // Rotation in degrees around Y axis
+}> = {
+  'plains-of-shinar': {
+    arkPosition: { x: 0, y: 34, z: 60 },       // Northern plateau (Ark model)
+    goalZonePosition: { x: 0, y: 29, z: 48 },  // Drop-off platform below the Ark
+    playerSpawn: { x: 0, y: 12, z: -50 },      // Southern flood plain (near start)
+    arkModelOffset: { x: 0, y: 5, z: -5 },     // Raise 5 blocks, move forward 5 blocks toward water
+    arkModelRotationY: 135,                     // Rotate 135 degrees to align with land
+  },
+  'original': {
+    arkPosition: { x: 0, y: 35, z: 20 },
+    goalZonePosition: { x: 0, y: 35, z: 20 },  // Same as ark position for original map
+    playerSpawn: { x: 0, y: 38, z: 15 },
+    arkModelOffset: { x: 0, y: -2, z: 0 },
+    arkModelRotationY: 90,
+  },
+};
+
+const currentConfig = MAP_CONFIGS[MAP_NAME] || MAP_CONFIGS['plains-of-shinar'];
+
+// Ark position - where the model sits
+const ARK_POSITION: Vector3Like = currentConfig.arkPosition;
+// Goal zone position - where players deliver animals (drop-off platform)
+const GOAL_ZONE_POSITION: Vector3Like = currentConfig.goalZonePosition;
 // Ark model configuration
-const ARK_MODEL_URI = 'models/ark.gltf'; // Place your ark model at assets/models/ark.gltf
-const ARK_MODEL_SCALE = 2; // Adjust scale as needed
-const ARK_MODEL_OFFSET: Vector3Like = { x: 0, y: -2, z: 0 }; // Offset from goal zone position
-// Spawn slightly above the player spawn platform (Y=10 in map) so gravity brings them down safely
-const PLAYER_SPAWN_POSITION: Vector3Like = { x: 0, y: 12, z: 0 };
+const ARK_MODEL_URI = 'models/structures/noahs-ark.glb';
+const ARK_MODEL_SCALE = 0.5; // 50% of original size
+const ARK_MODEL_OFFSET: Vector3Like = currentConfig.arkModelOffset;
+const ARK_MODEL_ROTATION_Y: number = currentConfig.arkModelRotationY;
+// Spawn position
+const PLAYER_SPAWN_POSITION: Vector3Like = currentConfig.playerSpawn;
 const COUNTDOWN_SECONDS = 5;
 
 export default class GameManager {
@@ -102,15 +134,22 @@ export default class GameManager {
     this._animalManager = new AnimalManager(world);
     this._floodManager = new FloodManager(world, difficulty);
     this._arkGoalZone = new ArkGoalZone(world, {
-      position: ARK_POSITION,
+      position: GOAL_ZONE_POSITION,  // Drop-off platform position
+      arkModelPosition: ARK_POSITION,  // Actual Ark model position
       modelUri: ARK_MODEL_URI,
       modelScale: ARK_MODEL_SCALE,
       modelOffset: ARK_MODEL_OFFSET,
+      modelRotationY: ARK_MODEL_ROTATION_Y,
     });
 
     // Set up flood callbacks
     this._floodManager.onFloodRise((height, max) => {
       this._broadcastUIUpdate();
+
+      // Notify animals to flee from the rising water
+      if (this._animalManager) {
+        this._animalManager.updateFloodLevel(height);
+      }
 
       // Check if flood reached the ark (defeat condition)
       if (height >= ARK_POSITION.y - 2) {
@@ -348,6 +387,11 @@ export default class GameManager {
     if (this._animalManager) {
       this._animalManager.releaseAnimalsFromPlayer(player);
     }
+
+    // Clean up swimming state
+    if (this._floodManager) {
+      this._floodManager.removePlayerSwimmingState(player.id);
+    }
   }
 
   /**
@@ -382,12 +426,29 @@ export default class GameManager {
    * Handle player delivering animals at the ark
    */
   public handleArkDelivery(player: Player): void {
-    if (!this._animalManager || !this._arkGoalZone || this._state !== GameState.PLAYING) return;
+    if (!this._animalManager || !this._arkGoalZone || this._state !== GameState.PLAYING || !this._world) return;
+
+    // Check if player is near the ark (within 15 blocks)
+    const playerEntities = this._world.entityManager.getPlayerEntitiesByPlayer(player);
+    if (playerEntities.length === 0) return;
+
+    const playerPos = playerEntities[0].position;
+    const arkPos = this._arkGoalZone.position;
+    const dx = playerPos.x - arkPos.x;
+    const dy = playerPos.y - arkPos.y;
+    const dz = playerPos.z - arkPos.z;
+    const distanceSquared = dx * dx + dy * dy + dz * dz;
+    const ARK_DELIVERY_RANGE = 15; // Must be within 15 blocks of the ark
+
+    if (distanceSquared > ARK_DELIVERY_RANGE * ARK_DELIVERY_RANGE) {
+      this._world.chatManager.sendPlayerMessage(player, 'You must be at the Ark to deliver animals!', 'FFAA00');
+      return;
+    }
 
     const followingAnimals = this._animalManager.getAnimalsFollowingPlayer(player);
 
     if (followingAnimals.length === 0) {
-      this._world?.chatManager.sendPlayerMessage(player, 'You have no animals to deliver!', 'FF5555');
+      this._world.chatManager.sendPlayerMessage(player, 'You have no animals to deliver!', 'FF5555');
       return;
     }
 
@@ -406,6 +467,10 @@ export default class GameManager {
    * Send UI update to a specific player
    */
   private _sendUIUpdate(player: Player): void {
+    // Get swimming state for this player
+    const isSwimming = this._floodManager?.isPlayerSwimming(player.id) ?? false;
+    const swimmingStamina = this._floodManager?.getPlayerSwimmingStamina(player.id) ?? 100;
+
     player.ui.sendData({
       type: 'game-state',
       state: this._state,
@@ -414,6 +479,8 @@ export default class GameManager {
       floodProgress: this._floodManager?.progress ?? 0,
       floodHeight: this._floodManager?.currentHeight ?? 0,
       elapsedTime: this.elapsedTimeSeconds,
+      isSwimming: isSwimming,
+      swimmingStamina: swimmingStamina,
     });
   }
 

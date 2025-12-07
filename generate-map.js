@@ -35,12 +35,12 @@ const BLOCKS = {
 };
 
 // Map dimensions (centered on 0,0)
-const MAP_WIDTH = 100;  // X: -50 to 50
-const MAP_DEPTH = 120;  // Z: -60 to 60
+const MAP_WIDTH = 120;  // X: -60 to 60 (extended for ark plateau)
+const MAP_DEPTH = 160;  // Z: -60 to 100 (extended for ark plateau)
 
-// Key positions from game code
-const ARK_POSITION = { x: 0, y: 35, z: 20 };
-const PLAYER_SPAWN = { x: 0, y: 10, z: 0 };
+// Key positions from game code (plains-of-shinar config)
+const ARK_POSITION = { x: 0, y: 34, z: 60 };
+const PLAYER_SPAWN = { x: 0, y: 12, z: -50 };
 
 // Spawn zones from AnimalManager.ts
 const SPAWN_ZONES = [
@@ -85,10 +85,12 @@ function getTerrainHeight(x, z) {
     baseHeight = Math.min(baseHeight, 8);  // Tier 1 terrace
   } else if (z < -5) {
     baseHeight = Math.min(baseHeight, 16);  // Tier 2 terrace
-  } else if (z < 10) {
+  } else if (z < 20) {
     baseHeight = Math.min(baseHeight, 24);  // Tier 3 terrace
+  } else if (z < 40) {
+    baseHeight = Math.min(baseHeight, 30);  // Transition to plateau
   } else {
-    baseHeight = Math.max(baseHeight, 32);  // Ark plateau
+    baseHeight = Math.max(baseHeight, 34);  // Ark plateau (extended area)
   }
 
   // Add some natural variation
@@ -124,8 +126,8 @@ function isOnMainPath(x, z) {
 function generateTerrain() {
   console.log('Generating base terrain...');
 
-  for (let x = -50; x <= 50; x++) {
-    for (let z = -60; z <= 60; z++) {
+  for (let x = -60; x <= 60; x++) {
+    for (let z = -60; z <= 100; z++) {
       const height = getTerrainHeight(x, z);
 
       // Place blocks from y=0 up to height
@@ -158,9 +160,11 @@ function generateTerrain() {
 function generateArkPlateau() {
   console.log('Generating Ark plateau...');
 
-  // Flatten the plateau area (24x24 centered at Ark position)
-  for (let x = -16; x <= 16; x++) {
-    for (let z = 10; z <= 40; z++) {
+  // Flatten the plateau area - extended for ark at z=60
+  // X: -56 to 56 (112 blocks wide)
+  // Z: 20 to 90 (70 blocks deep - extended front and back)
+  for (let x = -56; x <= 56; x++) {
+    for (let z = 20; z <= 90; z++) {
       // Create flat plateau at Y=34
       for (let y = 0; y <= 34; y++) {
         if (y === 34) {
@@ -420,7 +424,7 @@ function generateWaterEdges() {
   console.log('Generating water at lowest edges...');
 
   // Add water at the very bottom edges (floodplain visualization)
-  for (let x = -50; x <= 50; x++) {
+  for (let x = -60; x <= 60; x++) {
     for (let z = -60; z <= -50; z++) {
       setBlock(x, 0, z, BLOCKS.WATER);
       setBlock(x, 1, z, BLOCKS.WATER);
