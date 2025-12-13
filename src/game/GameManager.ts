@@ -178,7 +178,7 @@ export default class GameManager {
 
     // Play background music
     new Audio({
-      uri: 'audio/music/hytopia-main-theme.mp3',
+      uri: 'audio/music/lumine wave - Everlasting Hope - Instrumental version.mp3',
       loop: true,
       volume: 0.1,
     }).play(world);

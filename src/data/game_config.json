@@ -33,7 +33,9 @@
     "max_animals_world": 100,
     "respawn_on_pair_completion": true,
     "follow_distance": 3.0,
-    "follow_speed_multiplier": 0.9
+    "follow_speed_multiplier": 1.4,
+    "catchup_speed_multiplier": 1.8,
+    "catchup_distance_threshold": 8
   },
   "powerups": {
     "enabled": false,

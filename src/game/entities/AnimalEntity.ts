@@ -65,6 +65,8 @@ export default class AnimalEntity extends Entity {
   private _isFollowing: boolean = false;
   private _followDistance: number;
   private _followSpeed: number;
+  private _catchupSpeed: number;
+  private _catchupDistanceThreshold: number;
   private _idleWanderTimeout: NodeJS.Timeout | null = null;
   private _wanderTarget: Vector3Like | null = null;
   private _lastPathfindTarget: Vector3Like | null = null;
@@ -94,6 +96,8 @@ export default class AnimalEntity extends Entity {
     this.spawnTier = options.spawnTier ?? 1;
     this._followDistance = config.animals.follow_distance;
     this._followSpeed = config.player.base_move_speed * config.animals.follow_speed_multiplier;
+    this._catchupSpeed = config.player.base_move_speed * (config.animals.catchup_speed_multiplier ?? 1.8);
+    this._catchupDistanceThreshold = config.animals.catchup_distance_threshold ?? 8;
 
     // Set up tick handler for following behavior
     this.on(EntityEvent.TICK, this._onTick.bind(this));
@@ -166,7 +170,13 @@ export default class AnimalEntity extends Entity {
     const dangerZone = floodHeight + 5;
 
     if (myY < dangerZone && !this._isFleeingFlood) {
-      this._startFleeingFlood();
+      // Stagger flee start to avoid all animals fleeing at exact same moment
+      const staggerDelay = Math.random() * 500; // 0-500ms random delay
+      setTimeout(() => {
+        if (!this._isFleeingFlood && !this._isFollowing && this.isSpawned) {
+          this._startFleeingFlood();
+        }
+      }, staggerDelay);
     }
   }
 
@@ -181,42 +191,25 @@ export default class AnimalEntity extends Entity {
 
     // Find a safe position - move toward higher ground (positive Z and higher Y)
     const myPos = this.position;
-    const safeHeight = this._currentFloodHeight + 15; // Target well above flood
 
     // Calculate flee target - move toward the ark area (higher Z) and uphill
     this._fleeTarget = {
-      x: myPos.x + (Math.random() - 0.5) * 10, // Some random lateral movement
-      y: Math.max(myPos.y + 5, safeHeight),     // Move up
-      z: myPos.z + 15 + Math.random() * 10,     // Move toward higher ground (ark direction)
+      x: myPos.x + (Math.random() - 0.5) * 8, // Some random lateral movement
+      y: myPos.y + 3,                          // Move up gradually
+      z: myPos.z + 10 + Math.random() * 8,     // Move toward higher ground (ark direction)
     };
 
     // Start walking animation
     this.stopModelAnimations(['idle']);
     this.startModelLoopedAnimations(['walk']);
 
-    // Use pathfinding to get to safety
-    const pathFound = this.pathfindingController.pathfind(this._fleeTarget, this._followSpeed * 1.2, {
-      maxJump: 3,  // Allow bigger jumps when fleeing
-      maxFall: 4,
-      pathfindCompleteCallback: () => {
+    // Use simple movement for fleeing (much cheaper than pathfinding)
+    // This keeps CPU low when many animals flee at once
+    this.pathfindingController.move(this._fleeTarget, this._followSpeed * 1.3, {
+      moveCompleteCallback: () => {
         this._onFleeComplete();
       },
-      pathfindAbortCallback: () => {
-        // Try again with a different target
-        this._isFleeingFlood = false;
-        this._fleeTarget = null;
-        // Will retry on next flood update
-      },
     });
-
-    if (!pathFound) {
-      // Fallback: simple movement uphill
-      this.pathfindingController.move(this._fleeTarget, this._followSpeed * 1.2, {
-        moveCompleteCallback: () => {
-          this._onFleeComplete();
-        },
-      });
-    }
 
     this.pathfindingController.face(this._fleeTarget, 5);
   }
@@ -310,34 +303,38 @@ export default class AnimalEntity extends Entity {
 
     // Only move if we're too far from the player
     if (distance > this._followDistance) {
+      // Use catch-up speed if animal is falling behind
+      const isFarBehind = distance > this._catchupDistanceThreshold;
+      const currentSpeed = isFarBehind ? this._catchupSpeed : this._followSpeed;
+
       // Check if we need to recalculate path
       const needsNewPath = this._shouldRecalculatePath(playerPos);
 
       if (needsNewPath && this._pathfindCooldown <= 0) {
         // Use pathfinding for terrain navigation
-        const pathFound = this.pathfindingController.pathfind(playerPos, this._followSpeed, {
-          maxJump: 2,  // Can jump up 2 blocks
-          maxFall: 3,  // Can fall down 3 blocks
+        const pathFound = this.pathfindingController.pathfind(playerPos, currentSpeed, {
+          maxJump: 2,  // Keep pathfinding search space reasonable for performance
+          maxFall: 3,
           pathfindCompleteCallback: () => {
             // Path complete, will check again on next tick
             this._lastPathfindTarget = null;
           },
           pathfindAbortCallback: () => {
-            // Path failed, try again soon
+            // Path failed, try simple movement instead
             this._lastPathfindTarget = null;
-            this._pathfindCooldown = 10; // Wait 10 ticks before retry
+            this._pathfindCooldown = 15; // Wait longer before retry on failure
           },
         });
 
         if (pathFound) {
           this._lastPathfindTarget = { ...playerPos };
-          this._pathfindCooldown = 20; // Don't recalculate for 20 ticks (~2 seconds)
+          this._pathfindCooldown = 12; // Don't recalculate for 12 ticks (~1.2 seconds)
         } else {
-          // Fallback to simple movement if pathfinding fails
-          this.pathfindingController.move(playerPos, this._followSpeed, {
+          // Fallback to simple movement if pathfinding fails (much cheaper)
+          this.pathfindingController.move(playerPos, currentSpeed, {
             moveIgnoreAxes: { y: true },
           });
-          this._pathfindCooldown = 30;
+          this._pathfindCooldown = 15;
         }
       }
 
@@ -349,13 +346,13 @@ export default class AnimalEntity extends Entity {
   private _shouldRecalculatePath(playerPos: Vector3Like): boolean {
     if (!this._lastPathfindTarget) return true;
 
-    // Recalculate if player moved more than 3 blocks
+    // Recalculate if player moved more than 2 blocks
     const dx = playerPos.x - this._lastPathfindTarget.x;
     const dy = playerPos.y - this._lastPathfindTarget.y;
     const dz = playerPos.z - this._lastPathfindTarget.z;
     const distMoved = Math.sqrt(dx * dx + dy * dy + dz * dz);
 
-    return distMoved > 3;
+    return distMoved > 2;
   }
 
   private _updateWanderBehavior(): void {
@@ -377,15 +374,15 @@ export default class AnimalEntity extends Entity {
   private _startIdleWander(): void {
     this._clearIdleWander();
 
-    // Random delay before wandering (5-15 seconds)
-    const delay = 5000 + Math.random() * 10000;
+    // Random delay before wandering (8-20 seconds) - longer delays reduce CPU load
+    const delay = 8000 + Math.random() * 12000;
 
     this._idleWanderTimeout = setTimeout(() => {
-      if (!this.isSpawned || this._isFollowing) return;
+      if (!this.isSpawned || this._isFollowing || this._isFleeingFlood) return;
 
       // Pick a random nearby position to wander to
       const myPos = this.position;
-      const wanderRadius = 3 + Math.random() * 4;
+      const wanderRadius = 2 + Math.random() * 3; // Smaller radius = easier paths
       const angle = Math.random() * Math.PI * 2;
 
       this._wanderTarget = {
@@ -398,38 +395,18 @@ export default class AnimalEntity extends Entity {
       this.stopModelAnimations(['idle']);
       this.startModelLoopedAnimations(['walk']);
 
-      // Use pathfinding for wander to navigate terrain
-      const pathFound = this.pathfindingController.pathfind(this._wanderTarget, this._followSpeed * 0.5, {
-        maxJump: 1,  // Smaller jumps for wandering
-        maxFall: 2,
-        pathfindCompleteCallback: () => {
-          if (!this._isFollowing) {
+      // Use simple movement for wandering (much cheaper than pathfinding)
+      // Animals don't need precise navigation when just wandering around
+      this.pathfindingController.move(this._wanderTarget, this._followSpeed * 0.5, {
+        moveIgnoreAxes: { y: true },
+        moveCompleteCallback: () => {
+          if (!this._isFollowing && !this._isFleeingFlood) {
             this.stopModelAnimations(['walk']);
             this.startModelLoopedAnimations(['idle']);
             this._startIdleWander();
           }
         },
-        pathfindAbortCallback: () => {
-          // If pathfinding fails, just go idle and try again
-          this.stopModelAnimations(['walk']);
-          this.startModelLoopedAnimations(['idle']);
-          this._startIdleWander();
-        },
       });
-
-      if (!pathFound) {
-        // Fallback to simple movement
-        this.pathfindingController.move(this._wanderTarget, this._followSpeed * 0.5, {
-          moveIgnoreAxes: { y: true },
-          moveCompleteCallback: () => {
-            if (!this._isFollowing) {
-              this.stopModelAnimations(['walk']);
-              this.startModelLoopedAnimations(['idle']);
-              this._startIdleWander();
-            }
-          },
-        });
-      }
       this.pathfindingController.face(this._wanderTarget, 3);
 
     }, delay);

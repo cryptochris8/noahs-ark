@@ -38,6 +38,8 @@ export interface AnimalsConfig {
   respawn_on_pair_completion: boolean;
   follow_distance: number;
   follow_speed_multiplier: number;
+  catchup_speed_multiplier?: number;
+  catchup_distance_threshold?: number;
 }
 
 export interface AnimalType {
