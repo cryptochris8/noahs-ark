@@ -42,6 +42,38 @@ export interface AnimalsConfig {
   catchup_distance_threshold?: number;
 }
 
+export interface PowerUpTypeConfig {
+  display_name: string;
+  duration_seconds: number;
+  effect_multiplier?: number;
+  effect_radius?: number;
+  color: string;
+}
+
+export interface PowerUpsConfig {
+  enabled: boolean;
+  spawn_interval_seconds: number;
+  max_active_powerups: number;
+  types: Record<string, PowerUpTypeConfig>;
+}
+
+export interface ScoringConfig {
+  enabled: boolean;
+  points_per_pair: number;
+  speed_bonus_threshold_seconds: number;
+  speed_bonus_points: number;
+  powerup_collect_points: number;
+  completion_bonus: number;
+  time_bonus_per_second_remaining: number;
+  difficulty_multipliers: Record<DifficultyKey, number>;
+}
+
+export interface LeaderboardConfig {
+  enabled: boolean;
+  max_entries: number;
+  storage_file: string;
+}
+
 export interface AnimalType {
   id: string;
   display_name: string;
@@ -72,6 +104,9 @@ class GameConfig {
   public readonly flood: FloodConfig;
   public readonly swimming: SwimmingConfig;
   public readonly animals: AnimalsConfig;
+  public readonly powerups: PowerUpsConfig;
+  public readonly scoring: ScoringConfig;
+  public readonly leaderboard: LeaderboardConfig;
   public readonly animalTypes: AnimalType[];
   public readonly difficultyModes: Record<DifficultyKey, DifficultyMode>;
 
@@ -85,6 +120,9 @@ class GameConfig {
     this.flood = gameConfigData.flood;
     this.swimming = gameConfigData.swimming;
     this.animals = gameConfigData.animals;
+    this.powerups = (gameConfigData as any).powerups;
+    this.scoring = (gameConfigData as any).scoring;
+    this.leaderboard = (gameConfigData as any).leaderboard;
     this.animalTypes = animalsData.animal_types;
     this.difficultyModes = wavesData.modes as Record<DifficultyKey, DifficultyMode>;
   }

@@ -19,13 +19,32 @@
     </div>
   </div>
 
-  <!-- Top Right: Timer -->
+  <!-- Top Right: Timer and Score -->
   <div class="hud-top-right">
     <div class="timer-display">
       <img src="{{CDN_ASSETS_URL}}/ui/icon_timer.png" class="hud-icon" alt="Timer" />
       <span id="timer-text">0:00</span>
     </div>
+    <div class="score-display">
+      <span class="score-label">SCORE</span>
+      <span id="score-text">0</span>
+    </div>
   </div>
+
+  <!-- Mini-Map (below timer) -->
+  <div id="minimap-container" class="minimap-container">
+    <canvas id="minimap-canvas" width="150" height="150"></canvas>
+    <div class="minimap-legend">
+      <span class="legend-player">You</span>
+      <span class="legend-ark">Ark</span>
+    </div>
+  </div>
+
+  <!-- Match Arrows (screen-edge indicators) -->
+  <div id="match-arrows-container" class="match-arrows-container"></div>
+
+  <!-- Ark Arrow (shows when pair is ready to deliver) -->
+  <div id="ark-arrow-container" class="ark-arrow-container hidden"></div>
 
   <!-- Bottom Center: Pairs Counter -->
   <div class="hud-bottom-center">
@@ -34,6 +53,31 @@
       <span id="pairs-text">Pairs: 0 / 6</span>
     </div>
   </div>
+
+  <!-- Bottom Left: Following Animals -->
+  <div class="hud-bottom-left">
+    <div id="following-container" class="following-display hidden">
+      <span class="following-label">Following:</span>
+      <div id="following-animals" class="following-list"></div>
+    </div>
+  </div>
+
+  <!-- Swimming Stamina Bar -->
+  <div id="stamina-container" class="stamina-container hidden">
+    <div class="stamina-label">STAMINA</div>
+    <div class="stamina-bar">
+      <div id="stamina-fill" class="stamina-fill"></div>
+    </div>
+  </div>
+
+  <!-- Active Power-ups Display -->
+  <div id="powerups-container" class="powerups-container hidden">
+    <div class="powerups-label">POWER-UPS</div>
+    <div id="powerups-list" class="powerups-list"></div>
+  </div>
+
+  <!-- Flood Warning Overlay -->
+  <div id="flood-warning-overlay" class="flood-warning-overlay hidden"></div>
 
   <!-- Center: Notifications -->
   <div id="notification-container">
@@ -46,6 +90,14 @@
       <h1 id="game-over-title">VICTORY!</h1>
       <p id="game-over-message">All pairs have been saved!</p>
       <p id="game-over-stats">Time: 0:00 | Pairs: 0/0</p>
+      <div id="game-over-score" class="game-over-score">
+        <span class="final-score-label">Final Score:</span>
+        <span id="final-score-value" class="final-score-value">0</span>
+      </div>
+      <div id="leaderboard-container" class="leaderboard-container">
+        <h2 class="leaderboard-title">LEADERBOARD</h2>
+        <div id="leaderboard-list" class="leaderboard-list"></div>
+      </div>
     </div>
   </div>
 </div>
@@ -76,7 +128,21 @@
     pairsCollected: 0,
     requiredPairs: 6,
     floodProgress: 0,
-    elapsedTime: 0
+    floodHeight: 0,
+    elapsedTime: 0,
+    followingAnimals: [],
+    isSwimming: false,
+    swimmingStamina: 100,
+    // Mini-map and arrow data
+    playerPosition: { x: 0, z: 0 },
+    animalPositions: [],
+    arkPosition: { x: 0, z: 60 },
+    mapBounds: { minX: -65, maxX: 65, minZ: -65, maxZ: 65 },
+    matchingAnimals: null,
+    // Active power-ups
+    activePowerUps: [],
+    // Score
+    score: 0
   };
 
   // DOM Elements
@@ -89,6 +155,20 @@
   const gameOverTitle = document.getElementById('game-over-title');
   const gameOverMessage = document.getElementById('game-over-message');
   const gameOverStats = document.getElementById('game-over-stats');
+  const followingContainer = document.getElementById('following-container');
+  const followingAnimals = document.getElementById('following-animals');
+  const floodWarningOverlay = document.getElementById('flood-warning-overlay');
+  const staminaContainer = document.getElementById('stamina-container');
+  const staminaFill = document.getElementById('stamina-fill');
+  const minimapCanvas = document.getElementById('minimap-canvas');
+  const minimapCtx = minimapCanvas ? minimapCanvas.getContext('2d') : null;
+  const matchArrowsContainer = document.getElementById('match-arrows-container');
+  const powerupsContainer = document.getElementById('powerups-container');
+  const powerupsList = document.getElementById('powerups-list');
+  const scoreText = document.getElementById('score-text');
+  const finalScoreValue = document.getElementById('final-score-value');
+  const leaderboardList = document.getElementById('leaderboard-list');
+  const arkArrowContainer = document.getElementById('ark-arrow-container');
 
   // Format time as M:SS
   function formatTime(seconds) {
@@ -109,6 +189,401 @@
 
     // Update timer
     timerText.textContent = formatTime(gameState.elapsedTime);
+
+    // Update score
+    if (scoreText) {
+      scoreText.textContent = gameState.score.toLocaleString();
+    }
+
+    // Update following animals display
+    updateFollowingAnimals();
+
+    // Update flood warning overlay
+    updateFloodWarning();
+
+    // Update stamina bar
+    updateStaminaBar();
+
+    // Update mini-map
+    drawMinimap();
+
+    // Update match arrows
+    updateMatchArrows();
+
+    // Update Ark arrow (when pair is ready)
+    updateArkArrow();
+
+    // Update power-ups display
+    updatePowerupsDisplay();
+  }
+
+  // Update stamina bar when swimming
+  function updateStaminaBar() {
+    if (gameState.isSwimming) {
+      staminaContainer.classList.remove('hidden');
+      const staminaPct = Math.max(0, Math.min(100, gameState.swimmingStamina));
+      staminaFill.style.width = `${staminaPct}%`;
+
+      // Change color based on stamina level
+      if (staminaPct > 50) {
+        staminaFill.style.backgroundColor = '#00AAFF'; // Blue - healthy
+      } else if (staminaPct > 25) {
+        staminaFill.style.backgroundColor = '#FFAA00'; // Orange - warning
+      } else {
+        staminaFill.style.backgroundColor = '#FF4444'; // Red - danger
+        staminaFill.classList.add('critical');
+      }
+
+      if (staminaPct > 25) {
+        staminaFill.classList.remove('critical');
+      }
+    } else {
+      staminaContainer.classList.add('hidden');
+    }
+  }
+
+  // Update the following animals display
+  function updateFollowingAnimals() {
+    if (gameState.followingAnimals && gameState.followingAnimals.length > 0) {
+      followingContainer.classList.remove('hidden');
+      followingAnimals.innerHTML = gameState.followingAnimals.map(animal =>
+        `<span class="animal-tag">${animal}</span>`
+      ).join('');
+    } else {
+      followingContainer.classList.add('hidden');
+    }
+  }
+
+  // Update flood warning overlay based on flood progress
+  function updateFloodWarning() {
+    const floodPct = gameState.floodProgress;
+
+    // Show warning when flood is above 60%
+    if (floodPct > 0.6) {
+      floodWarningOverlay.classList.remove('hidden');
+      // Increase intensity as flood rises
+      const intensity = Math.min(0.4, (floodPct - 0.6) * 1.0);
+      floodWarningOverlay.style.backgroundColor = `rgba(0, 100, 200, ${intensity})`;
+
+      // Add pulsing effect when very high
+      if (floodPct > 0.85) {
+        floodWarningOverlay.classList.add('pulse');
+      } else {
+        floodWarningOverlay.classList.remove('pulse');
+      }
+    } else {
+      floodWarningOverlay.classList.add('hidden');
+      floodWarningOverlay.classList.remove('pulse');
+    }
+
+    // Swimming indicator
+    if (gameState.isSwimming) {
+      floodWarningOverlay.classList.remove('hidden');
+      floodWarningOverlay.style.backgroundColor = `rgba(0, 150, 255, 0.3)`;
+    }
+  }
+
+  // Power-up type icons
+  const POWERUP_ICONS = {
+    'Speed Boots': '👟',
+    'Animal Magnet': '🧲',
+    'Flood Freeze': '❄️'
+  };
+
+  // Update power-ups display
+  function updatePowerupsDisplay() {
+    if (!powerupsContainer || !powerupsList) return;
+
+    if (gameState.activePowerUps && gameState.activePowerUps.length > 0) {
+      powerupsContainer.classList.remove('hidden');
+      powerupsList.innerHTML = gameState.activePowerUps.map(powerup => {
+        const icon = POWERUP_ICONS[powerup.type] || '⚡';
+        return `
+          <div class="powerup-item" style="border-color: ${powerup.color}; color: ${powerup.color};">
+            <span class="powerup-icon">${icon}</span>
+            <span class="powerup-name">${powerup.type}</span>
+            <span class="powerup-timer">${powerup.remainingSeconds}s</span>
+          </div>
+        `;
+      }).join('');
+    } else {
+      powerupsContainer.classList.add('hidden');
+    }
+  }
+
+  // Animal type to color mapping for mini-map
+  const ANIMAL_COLORS = {
+    sheep: '#FFFFFF', cow: '#8B4513', pig: '#FFB6C1', chicken: '#FFD700',
+    horse: '#A0522D', donkey: '#808080', rabbit: '#D2B48C', raccoon: '#696969',
+    beaver: '#8B4513', frog: '#32CD32', turtle: '#228B22', lizard: '#9ACD32',
+    crab: '#FF6347', fox: '#FF4500', wolf: '#708090', bear: '#5D4E37',
+    ocelot: '#DAA520', capybara: '#C4A484', penguin: '#4169E1', flamingo: '#FF69B4',
+    peacock: '#4169E1', bat: '#2F4F4F', dog: '#D2691E', cat: '#FFA500'
+  };
+
+  // Draw the mini-map
+  function drawMinimap() {
+    if (!minimapCtx) return;
+
+    const canvas = minimapCanvas;
+    const ctx = minimapCtx;
+    const size = canvas.width;
+    const padding = 5;
+    const drawSize = size - padding * 2;
+
+    // Clear canvas
+    ctx.clearRect(0, 0, size, size);
+
+    // Draw terrain background
+    ctx.fillStyle = 'rgba(60, 100, 50, 0.6)';
+    ctx.fillRect(padding, padding, drawSize, drawSize);
+
+    // Draw flood level (from bottom)
+    if (gameState.floodProgress > 0) {
+      const floodHeight = drawSize * gameState.floodProgress;
+      ctx.fillStyle = 'rgba(30, 100, 180, 0.5)';
+      ctx.fillRect(padding, size - padding - floodHeight, drawSize, floodHeight);
+    }
+
+    // Helper to convert world coords to minimap coords
+    const bounds = gameState.mapBounds;
+    function worldToMinimap(worldX, worldZ) {
+      const rangeX = bounds.maxX - bounds.minX;
+      const rangeZ = bounds.maxZ - bounds.minZ;
+      const normX = (worldX - bounds.minX) / rangeX;
+      const normZ = (worldZ - bounds.minZ) / rangeZ;
+      return {
+        x: padding + normX * drawSize,
+        y: padding + (1 - normZ) * drawSize // Flip Z for top-down view (north is up)
+      };
+    }
+
+    // Check if player has a pair ready to deliver
+    const hasPairReady = gameState.followingAnimals && gameState.followingAnimals.length === 2;
+
+    // Draw Ark (with pulsing effect when pair is ready)
+    const arkPos = worldToMinimap(gameState.arkPosition.x, gameState.arkPosition.z);
+
+    if (hasPairReady) {
+      // Pulsing glow effect when pair is ready
+      const pulsePhase = (Date.now() % 1000) / 1000;
+      const pulseScale = 1 + Math.sin(pulsePhase * Math.PI * 2) * 0.3;
+      const pulseAlpha = 0.4 + Math.sin(pulsePhase * Math.PI * 2) * 0.3;
+
+      // Outer glow ring
+      ctx.beginPath();
+      ctx.arc(arkPos.x, arkPos.y, 12 * pulseScale, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(255, 215, 0, ${pulseAlpha})`;
+      ctx.fill();
+
+      // Middle glow ring
+      ctx.beginPath();
+      ctx.arc(arkPos.x, arkPos.y, 8 * pulseScale, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(255, 215, 0, ${pulseAlpha + 0.2})`;
+      ctx.fill();
+    }
+
+    // Draw the Ark itself
+    ctx.fillStyle = '#FFD700';
+    ctx.fillRect(arkPos.x - 6, arkPos.y - 4, 12, 8);
+    ctx.strokeStyle = hasPairReady ? '#FFFFFF' : '#B8860B';
+    ctx.lineWidth = hasPairReady ? 2 : 1;
+    ctx.strokeRect(arkPos.x - 6, arkPos.y - 4, 12, 8);
+
+    // Check if animal is a matching animal (for blinking effect)
+    function isMatchingAnimal(animalX, animalZ) {
+      if (!gameState.matchingAnimals || gameState.matchingAnimals.length === 0) return false;
+      return gameState.matchingAnimals.some(m =>
+        Math.abs(m.x - animalX) < 2 && Math.abs(m.z - animalZ) < 2
+      );
+    }
+
+    // Blink animation based on time
+    const blinkPhase = (Date.now() % 800) / 800; // 0 to 1 over 800ms
+    const blinkVisible = blinkPhase < 0.7; // Visible 70% of the time
+    const blinkScale = 1 + Math.sin(blinkPhase * Math.PI * 2) * 0.5; // Pulsing size
+
+    // Draw animals
+    gameState.animalPositions.forEach(animal => {
+      const pos = worldToMinimap(animal.x, animal.z);
+      const color = ANIMAL_COLORS[animal.type] || '#AAAAAA';
+      const isMatch = isMatchingAnimal(animal.x, animal.z);
+
+      // Skip drawing if it's a matching animal during "off" phase of blink
+      if (isMatch && !blinkVisible) return;
+
+      // Matching animals pulse larger
+      const baseRadius = animal.isFollowing ? 4 : 2.5;
+      const radius = isMatch ? baseRadius * blinkScale : baseRadius;
+
+      ctx.beginPath();
+      ctx.arc(pos.x, pos.y, radius, 0, Math.PI * 2);
+      ctx.fillStyle = color;
+      ctx.fill();
+
+      // Highlight following animals with green ring
+      if (animal.isFollowing) {
+        ctx.strokeStyle = '#00FF00';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
+
+      // Highlight matching animals with pulsing yellow/gold ring
+      if (isMatch && !animal.isFollowing) {
+        ctx.strokeStyle = '#FFD700';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        // Add outer glow effect
+        ctx.beginPath();
+        ctx.arc(pos.x, pos.y, radius + 3, 0, Math.PI * 2);
+        ctx.strokeStyle = `rgba(255, 215, 0, ${0.3 + blinkPhase * 0.4})`;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
+    });
+
+    // Draw player (on top)
+    const playerPos = worldToMinimap(gameState.playerPosition.x, gameState.playerPosition.z);
+    ctx.beginPath();
+    ctx.arc(playerPos.x, playerPos.y, 5, 0, Math.PI * 2);
+    ctx.fillStyle = '#00FF00';
+    ctx.fill();
+    ctx.strokeStyle = '#FFFFFF';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }
+
+  // Arrow characters for 8 directions
+  const ARROWS = {
+    right: '\u2192', upRight: '\u2197', up: '\u2191', upLeft: '\u2196',
+    left: '\u2190', downLeft: '\u2199', down: '\u2193', downRight: '\u2198'
+  };
+
+  // Update match arrows pointing to matching animals
+  function updateMatchArrows() {
+    if (!matchArrowsContainer) return;
+
+    // Clear existing arrows
+    matchArrowsContainer.innerHTML = '';
+
+    // Don't show if no matching animals
+    if (!gameState.matchingAnimals || gameState.matchingAnimals.length === 0) return;
+
+    const screenCenterX = window.innerWidth / 2;
+    const screenCenterY = window.innerHeight / 2;
+    const edgeMargin = 80;
+
+    // Limit to 5 arrows max to avoid clutter
+    const animalsToShow = gameState.matchingAnimals.slice(0, 5);
+
+    animalsToShow.forEach(animal => {
+      // Calculate direction from player to animal
+      const dx = animal.x - gameState.playerPosition.x;
+      const dz = animal.z - gameState.playerPosition.z;
+      const angle = Math.atan2(-dz, dx); // Negative Z because forward is -Z
+
+      // Get arrow character for this angle
+      const arrowChar = getArrowForAngle(angle);
+
+      // Calculate screen edge position
+      const screenPos = getScreenEdgePosition(angle, screenCenterX, screenCenterY, edgeMargin);
+
+      // Calculate distance
+      const distance = Math.round(Math.sqrt(dx * dx + dz * dz));
+
+      // Create arrow element
+      const arrow = document.createElement('div');
+      arrow.className = 'match-arrow';
+      arrow.innerHTML = `${arrowChar}<span class="distance">${distance}m</span>`;
+      arrow.style.left = `${screenPos.x - 25}px`;
+      arrow.style.top = `${screenPos.y - 25}px`;
+
+      matchArrowsContainer.appendChild(arrow);
+    });
+  }
+
+  function getArrowForAngle(angle) {
+    const deg = angle * 180 / Math.PI;
+    if (deg >= -22.5 && deg < 22.5) return ARROWS.right;
+    if (deg >= 22.5 && deg < 67.5) return ARROWS.upRight;
+    if (deg >= 67.5 && deg < 112.5) return ARROWS.up;
+    if (deg >= 112.5 && deg < 157.5) return ARROWS.upLeft;
+    if (deg >= 157.5 || deg < -157.5) return ARROWS.left;
+    if (deg >= -157.5 && deg < -112.5) return ARROWS.downLeft;
+    if (deg >= -112.5 && deg < -67.5) return ARROWS.down;
+    return ARROWS.downRight;
+  }
+
+  function getScreenEdgePosition(angle, centerX, centerY, margin) {
+    const screenW = window.innerWidth;
+    const screenH = window.innerHeight;
+    const cos = Math.cos(angle);
+    const sin = Math.sin(angle);
+
+    // Calculate intersection with screen edge
+    let tX = Infinity, tY = Infinity;
+    if (Math.abs(cos) > 0.001) {
+      tX = cos > 0 ? (screenW - margin - centerX) / cos : (-centerX + margin) / cos;
+    }
+    if (Math.abs(sin) > 0.001) {
+      tY = sin > 0 ? (-centerY + margin) / sin : (screenH - margin - centerY) / sin;
+    }
+
+    const t = Math.min(Math.abs(tX), Math.abs(tY));
+    return {
+      x: Math.max(margin, Math.min(screenW - margin, centerX + cos * t)),
+      y: Math.max(margin, Math.min(screenH - margin, centerY - sin * t))
+    };
+  }
+
+  // Update Ark arrow - shows gold arrow pointing to Ark when player has 2 animals (a pair)
+  function updateArkArrow() {
+    if (!arkArrowContainer) return;
+
+    // Only show when player has exactly 2 animals following (a pair ready to deliver)
+    const hasPairReady = gameState.followingAnimals && gameState.followingAnimals.length === 2;
+
+    if (!hasPairReady) {
+      arkArrowContainer.classList.add('hidden');
+      arkArrowContainer.innerHTML = '';
+      return;
+    }
+
+    arkArrowContainer.classList.remove('hidden');
+
+    const screenCenterX = window.innerWidth / 2;
+    const screenCenterY = window.innerHeight / 2;
+    const edgeMargin = 100;
+
+    // Calculate direction from player to Ark
+    const dx = gameState.arkPosition.x - gameState.playerPosition.x;
+    const dz = gameState.arkPosition.z - gameState.playerPosition.z;
+    const angle = Math.atan2(-dz, dx); // Negative Z because forward is -Z
+
+    // Get arrow character for this angle
+    const arrowChar = getArrowForAngle(angle);
+
+    // Calculate screen edge position
+    const screenPos = getScreenEdgePosition(angle, screenCenterX, screenCenterY, edgeMargin);
+
+    // Calculate distance to Ark
+    const distance = Math.round(Math.sqrt(dx * dx + dz * dz));
+
+    // Create the Ark arrow element
+    arkArrowContainer.innerHTML = `
+      <div class="ark-arrow">
+        <span class="ark-arrow-icon">${arrowChar}</span>
+        <span class="ark-arrow-label">ARK</span>
+        <span class="ark-arrow-distance">${distance}m</span>
+      </div>
+    `;
+
+    const arrow = arkArrowContainer.querySelector('.ark-arrow');
+    if (arrow) {
+      arrow.style.left = `${screenPos.x - 35}px`;
+      arrow.style.top = `${screenPos.y - 35}px`;
+    }
   }
 
   // Show a notification
@@ -137,6 +612,32 @@
       gameOverMessage.textContent = 'The flood has reached the Ark!';
       gameOverStats.textContent = `Pairs Saved: ${stats.pairsCollected} / ${stats.requiredPairs}`;
     }
+
+    // Display final score
+    if (finalScoreValue && stats.playerScores && stats.playerScores.length > 0) {
+      const myScore = stats.playerScores[0]; // First player's score (single player for now)
+      finalScoreValue.textContent = myScore.score.toLocaleString();
+      if (myScore.rank) {
+        finalScoreValue.textContent += ` (Rank #${myScore.rank})`;
+      }
+    } else {
+      finalScoreValue.textContent = gameState.score.toLocaleString();
+    }
+
+    // Display leaderboard
+    if (leaderboardList && stats.leaderboard && stats.leaderboard.length > 0) {
+      leaderboardList.innerHTML = stats.leaderboard.map((entry, index) => `
+        <div class="leaderboard-entry ${index < 3 ? 'top-three' : ''}">
+          <span class="leaderboard-rank">#${entry.rank}</span>
+          <span class="leaderboard-name">${entry.playerName}</span>
+          <span class="leaderboard-score">${entry.score.toLocaleString()}</span>
+          <span class="leaderboard-time">${formatTime(entry.timeSeconds)}</span>
+        </div>
+      `).join('');
+    } else {
+      leaderboardList.innerHTML = '<div class="leaderboard-empty">No scores yet!</div>';
+    }
+
     gameOverScreen.classList.remove('hidden');
   }
 
@@ -153,7 +654,21 @@
         pairsCollected: data.pairsCollected,
         requiredPairs: data.requiredPairs,
         floodProgress: data.floodProgress,
-        elapsedTime: data.elapsedTime
+        floodHeight: data.floodHeight || 0,
+        elapsedTime: data.elapsedTime,
+        followingAnimals: data.followingAnimals || [],
+        isSwimming: data.isSwimming || false,
+        swimmingStamina: data.swimmingStamina || 100,
+        // Mini-map and arrow data
+        playerPosition: data.playerPosition || { x: 0, z: 0 },
+        animalPositions: data.animalPositions || [],
+        arkPosition: data.arkPosition || { x: 0, z: 60 },
+        mapBounds: data.mapBounds || { minX: -65, maxX: 65, minZ: -65, maxZ: 65 },
+        matchingAnimals: data.matchingAnimals || null,
+        // Active power-ups
+        activePowerUps: data.activePowerUps || [],
+        // Score
+        score: data.score || 0
       };
       updateUI();
     } else if (data.type === 'notification') {
@@ -167,7 +682,18 @@
         pairsCollected: 0,
         requiredPairs: 6,
         floodProgress: 0,
-        elapsedTime: 0
+        floodHeight: 0,
+        elapsedTime: 0,
+        followingAnimals: [],
+        isSwimming: false,
+        swimmingStamina: 100,
+        playerPosition: { x: 0, z: 0 },
+        animalPositions: [],
+        arkPosition: { x: 0, z: 60 },
+        mapBounds: { minX: -65, maxX: 65, minZ: -65, maxZ: 65 },
+        matchingAnimals: null,
+        activePowerUps: [],
+        score: 0
       };
       updateUI();
     }
@@ -239,10 +765,10 @@
     margin-right: 8px;
   }
 
-  /* Top Left - Flood Meter */
+  /* Top Left - Flood Meter (offset down to avoid Hytopia UI) */
   .hud-top-left {
     position: absolute;
-    top: 16px;
+    top: 70px;
     left: 16px;
   }
 
@@ -313,12 +839,365 @@
     text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
   }
 
+  .score-display {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    background: rgba(0, 0, 0, 0.6);
+    padding: 6px 16px;
+    border-radius: 8px;
+    border: 2px solid rgba(255, 215, 0, 0.5);
+    margin-top: 8px;
+  }
+
+  .score-label {
+    color: #FFD700;
+    font-size: 10px;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+
+  #score-text {
+    color: #fff;
+    font-size: 22px;
+    font-weight: bold;
+    text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
+  }
+
+  /* Mini-Map */
+  .minimap-container {
+    position: absolute;
+    top: 130px;
+    right: 16px;
+    width: 160px;
+    background: rgba(0, 0, 0, 0.7);
+    border: 2px solid rgba(139, 90, 43, 0.8);
+    border-radius: 8px;
+    padding: 8px;
+    pointer-events: none;
+  }
+
+  #minimap-canvas {
+    width: 144px;
+    height: 144px;
+    border-radius: 4px;
+    background: rgba(60, 80, 40, 0.5);
+  }
+
+  .minimap-legend {
+    display: flex;
+    justify-content: space-around;
+    font-size: 10px;
+    color: #888;
+    margin-top: 6px;
+  }
+
+  .legend-player::before {
+    content: '';
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    background: #00FF00;
+    border-radius: 50%;
+    margin-right: 4px;
+    vertical-align: middle;
+  }
+
+  .legend-ark::before {
+    content: '';
+    display: inline-block;
+    width: 10px;
+    height: 6px;
+    background: #FFD700;
+    margin-right: 4px;
+    vertical-align: middle;
+  }
+
+  /* Match Arrows */
+  .match-arrows-container {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    pointer-events: none;
+    z-index: 50;
+  }
+
+  .match-arrow {
+    position: absolute;
+    width: 50px;
+    height: 50px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 28px;
+    color: #90EE90;
+    text-shadow: 0 0 10px rgba(144, 238, 144, 0.9), 0 0 20px rgba(144, 238, 144, 0.5);
+    animation: arrowPulse 1.5s ease-in-out infinite;
+  }
+
+  .match-arrow .distance {
+    position: absolute;
+    bottom: -4px;
+    font-size: 10px;
+    color: #fff;
+    text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
+  }
+
+  @keyframes arrowPulse {
+    0%, 100% { opacity: 0.7; transform: scale(1); }
+    50% { opacity: 1; transform: scale(1.15); }
+  }
+
+  /* Ark Arrow (when pair is ready to deliver) */
+  .ark-arrow-container {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    pointer-events: none;
+    z-index: 60;
+  }
+
+  .ark-arrow-container.hidden {
+    display: none;
+  }
+
+  .ark-arrow {
+    position: absolute;
+    width: 70px;
+    height: 70px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: rgba(139, 90, 43, 0.85);
+    border: 3px solid #FFD700;
+    border-radius: 12px;
+    animation: arkArrowPulse 1.2s ease-in-out infinite;
+    box-shadow: 0 0 20px rgba(255, 215, 0, 0.6), 0 0 40px rgba(255, 215, 0, 0.3);
+  }
+
+  .ark-arrow-icon {
+    font-size: 28px;
+    color: #FFD700;
+    text-shadow: 0 0 10px rgba(255, 215, 0, 0.9);
+  }
+
+  .ark-arrow-label {
+    font-size: 11px;
+    font-weight: bold;
+    color: #FFD700;
+    text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
+    letter-spacing: 1px;
+  }
+
+  .ark-arrow-distance {
+    font-size: 10px;
+    color: #fff;
+    text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
+  }
+
+  @keyframes arkArrowPulse {
+    0%, 100% {
+      transform: scale(1);
+      box-shadow: 0 0 20px rgba(255, 215, 0, 0.6), 0 0 40px rgba(255, 215, 0, 0.3);
+    }
+    50% {
+      transform: scale(1.1);
+      box-shadow: 0 0 30px rgba(255, 215, 0, 0.8), 0 0 60px rgba(255, 215, 0, 0.5);
+    }
+  }
+
   /* Bottom Center - Pairs Counter */
   .hud-bottom-center {
     position: absolute;
     bottom: 80px;
     left: 50%;
     transform: translateX(-50%);
+  }
+
+  /* Bottom Left - Following Animals */
+  .hud-bottom-left {
+    position: absolute;
+    bottom: 80px;
+    left: 16px;
+  }
+
+  .following-display {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(0, 0, 0, 0.6);
+    padding: 8px 12px;
+    border-radius: 8px;
+    border: 2px solid rgba(100, 200, 100, 0.6);
+  }
+
+  .following-display.hidden {
+    display: none;
+  }
+
+  .following-label {
+    color: #aaa;
+    font-size: 12px;
+    font-weight: bold;
+  }
+
+  .following-list {
+    display: flex;
+    gap: 6px;
+  }
+
+  .animal-tag {
+    background: rgba(100, 200, 100, 0.3);
+    color: #90EE90;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: bold;
+    text-transform: capitalize;
+  }
+
+  /* Swimming Stamina Bar */
+  .stamina-container {
+    position: fixed;
+    bottom: 140px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    z-index: 50;
+  }
+
+  .stamina-container.hidden {
+    display: none;
+  }
+
+  .stamina-label {
+    color: #00AAFF;
+    font-size: 12px;
+    font-weight: bold;
+    text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
+  }
+
+  .stamina-bar {
+    width: 200px;
+    height: 12px;
+    background: rgba(0, 0, 0, 0.7);
+    border-radius: 6px;
+    border: 2px solid rgba(0, 170, 255, 0.5);
+    overflow: hidden;
+  }
+
+  .stamina-fill {
+    height: 100%;
+    width: 100%;
+    background-color: #00AAFF;
+    border-radius: 4px;
+    transition: width 0.2s ease, background-color 0.3s ease;
+  }
+
+  .stamina-fill.critical {
+    animation: staminaPulse 0.5s ease-in-out infinite;
+  }
+
+  @keyframes staminaPulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
+
+  /* Active Power-ups Display */
+  .powerups-container {
+    position: fixed;
+    top: 320px;
+    right: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    z-index: 50;
+  }
+
+  .powerups-container.hidden {
+    display: none;
+  }
+
+  .powerups-label {
+    color: #FFD700;
+    font-size: 11px;
+    font-weight: bold;
+    text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
+    text-align: center;
+  }
+
+  .powerups-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .powerup-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(0, 0, 0, 0.7);
+    padding: 6px 10px;
+    border-radius: 6px;
+    border: 2px solid;
+    animation: powerupGlow 2s ease-in-out infinite;
+  }
+
+  .powerup-icon {
+    font-size: 16px;
+  }
+
+  .powerup-name {
+    color: #fff;
+    font-size: 12px;
+    font-weight: bold;
+    text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
+  }
+
+  .powerup-timer {
+    color: #FFD700;
+    font-size: 11px;
+    font-weight: bold;
+    margin-left: auto;
+  }
+
+  @keyframes powerupGlow {
+    0%, 100% { box-shadow: 0 0 5px currentColor; }
+    50% { box-shadow: 0 0 15px currentColor; }
+  }
+
+  /* Flood Warning Overlay */
+  .flood-warning-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    pointer-events: none;
+    transition: background-color 0.5s ease;
+    z-index: 100;
+  }
+
+  .flood-warning-overlay.hidden {
+    opacity: 0;
+  }
+
+  .flood-warning-overlay.pulse {
+    animation: floodPulse 1s ease-in-out infinite;
+  }
+
+  @keyframes floodPulse {
+    0%, 100% { opacity: 0.7; }
+    50% { opacity: 1; }
   }
 
   .pairs-display {
@@ -399,6 +1278,100 @@
     font-size: 18px;
     margin: 8px 0;
     color: #ddd;
+  }
+
+  /* Final Score Display */
+  .game-over-score {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 12px;
+    margin: 20px 0;
+    padding: 15px 30px;
+    background: rgba(0, 0, 0, 0.4);
+    border-radius: 10px;
+    border: 2px solid rgba(255, 215, 0, 0.5);
+  }
+
+  .final-score-label {
+    color: #FFD700;
+    font-size: 20px;
+    font-weight: bold;
+  }
+
+  .final-score-value {
+    color: #fff;
+    font-size: 32px;
+    font-weight: bold;
+    text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+  }
+
+  /* Leaderboard */
+  .leaderboard-container {
+    margin-top: 24px;
+    padding-top: 20px;
+    border-top: 2px solid rgba(150, 100, 50, 0.5);
+  }
+
+  .leaderboard-title {
+    color: #FFD700;
+    font-size: 22px;
+    margin-bottom: 16px;
+    text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+  }
+
+  .leaderboard-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: 250px;
+    overflow-y: auto;
+  }
+
+  .leaderboard-entry {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 16px;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 6px;
+    font-size: 14px;
+  }
+
+  .leaderboard-entry.top-three {
+    background: rgba(255, 215, 0, 0.15);
+    border: 1px solid rgba(255, 215, 0, 0.3);
+  }
+
+  .leaderboard-rank {
+    color: #FFD700;
+    font-weight: bold;
+    min-width: 35px;
+  }
+
+  .leaderboard-name {
+    color: #fff;
+    flex: 1;
+    text-align: left;
+  }
+
+  .leaderboard-score {
+    color: #00FF00;
+    font-weight: bold;
+    min-width: 80px;
+    text-align: right;
+  }
+
+  .leaderboard-time {
+    color: #aaa;
+    min-width: 50px;
+    text-align: right;
+  }
+
+  .leaderboard-empty {
+    color: #888;
+    font-style: italic;
+    padding: 20px;
   }
 
   /* Controls Hint */

@@ -12,10 +12,14 @@ import {
 } from 'hytopia';
 
 // Map configuration based on environment variable
-const MAP_NAME = process.env.MAP_NAME || 'plains-of-shinar';
+const MAP_NAME = process.env.MAP_NAME || 'mount-ararat';
 
 // Map-specific flood visual dimensions
 const MAP_DIMENSIONS: Record<string, { halfWidth: number; halfDepth: number }> = {
+  'mount-ararat': {
+    halfWidth: 65,   // X: -65 to +65 (covers 120x120 map with margin)
+    halfDepth: 65,   // Z: -65 to +65
+  },
   'plains-of-shinar': {
     halfWidth: 80,   // X: -80 to +80 (covers 150x150 map with margin)
     halfDepth: 80,   // Z: -80 to +80

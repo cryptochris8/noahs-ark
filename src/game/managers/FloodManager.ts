@@ -10,18 +10,21 @@ import {
   PlayerEntity,
   BlockType,
   type World,
+  type Player,
 } from 'hytopia';
 
 import GameConfig, { type DifficultyKey, type SwimmingConfig } from '../GameConfig';
 import FloodVisual from './FloodVisual';
 
 export type FloodEventCallback = (currentHeight: number, maxHeight: number) => void;
+export type PlayerDrownedCallback = (player: Player) => void;
 
 // Track swimming state per player
 interface PlayerSwimmingState {
   isSwimming: boolean;
   currentStamina: number;
   lastMessageTime: number;
+  hasDrowned: boolean;  // Prevent multiple drown triggers
 }
 
 export default class FloodManager {
@@ -39,6 +42,8 @@ export default class FloodManager {
   private _floodVisual: FloodVisual | null = null;
   private _onFloodRise: FloodEventCallback | null = null;
   private _onFloodWarning: (() => void) | null = null;
+  private _onPlayerDrowned: PlayerDrownedCallback | null = null;
+  private _isFloodFrozenCheck: (() => boolean) | null = null;
 
   // Swimming system
   private _swimmingConfig: SwimmingConfig;
@@ -112,6 +117,20 @@ export default class FloodManager {
    */
   public onFloodWarning(callback: () => void): void {
     this._onFloodWarning = callback;
+  }
+
+  /**
+   * Set callback for when a player drowns (stamina reaches zero)
+   */
+  public onPlayerDrowned(callback: PlayerDrownedCallback): void {
+    this._onPlayerDrowned = callback;
+  }
+
+  /**
+   * Set callback to check if flood is frozen (for Flood Freeze power-up)
+   */
+  public setFloodFrozenCheck(callback: () => boolean): void {
+    this._isFloodFrozenCheck = callback;
   }
 
   /**
@@ -219,9 +238,15 @@ export default class FloodManager {
   private _tick(): void {
     if (!this._isActive || !this._hasStarted) return;
 
+    // Check if flood is frozen (Flood Freeze power-up)
+    const isFrozen = this._isFloodFrozenCheck ? this._isFloodFrozenCheck() : false;
+
     // Calculate rise amount for this tick (100ms = 0.1 seconds)
-    const riseAmount = this._riseSpeed * 0.1;
-    this._currentHeight = Math.min(this._maxHeight, this._currentHeight + riseAmount);
+    // Don't rise if frozen
+    if (!isFrozen) {
+      const riseAmount = this._riseSpeed * 0.1;
+      this._currentHeight = Math.min(this._maxHeight, this._currentHeight + riseAmount);
+    }
 
     // Update collider position
     if (this._floodCollider) {
@@ -276,9 +301,23 @@ export default class FloodManager {
         isSwimming: false,
         currentStamina: this._maxStamina,
         lastMessageTime: 0,
+        hasDrowned: false,
       });
     }
     return this._playerSwimmingStates.get(playerId)!;
+  }
+
+  /**
+   * Reset a player's swimming state (call after respawn)
+   */
+  public resetPlayerSwimmingState(playerId: string): void {
+    const state = this._playerSwimmingStates.get(playerId);
+    if (state) {
+      state.isSwimming = false;
+      state.currentStamina = this._maxStamina;
+      state.hasDrowned = false;
+      state.lastMessageTime = 0;
+    }
   }
 
   /**
@@ -348,9 +387,21 @@ export default class FloodManager {
 
       // Apply a stronger upward impulse to help them escape
       playerEntity.applyImpulse({ x: 0, y: this._swimmingConfig.buoyancy_impulse * 0.3, z: 0 });
+    }
 
-      // Note: Actual health damage would require Hytopia health system
-      // For now, we use the impulse to push them up as a survival mechanic
+    // Player has completely drowned - trigger respawn
+    if (state.currentStamina <= 0 && !state.hasDrowned) {
+      state.hasDrowned = true;
+      this._world.chatManager.sendPlayerMessage(
+        player,
+        'You drowned! Respawning...',
+        'FF0000'
+      );
+
+      // Trigger the drowned callback
+      if (this._onPlayerDrowned) {
+        this._onPlayerDrowned(player);
+      }
     }
   }
 

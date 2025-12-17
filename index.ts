@@ -13,13 +13,23 @@ import {
   PlayerEvent,
 } from 'hytopia';
 
-// Map selection via environment variable (default: plains-of-shinar)
-const MAP_NAME = process.env.MAP_NAME || 'plains-of-shinar';
+// Map selection via environment variable (default: mount-ararat)
+// Available maps: 'plains-of-shinar', 'mount-ararat'
+const MAP_NAME = process.env.MAP_NAME || 'mount-ararat';
 
 // Dynamic map loading
-const worldMap = MAP_NAME === 'plains-of-shinar'
-  ? require('./assets/plains-of-shinar.json')
-  : require('./assets/map.json');
+function loadMap(mapName: string) {
+  switch (mapName) {
+    case 'mount-ararat':
+      return require('./assets/mount-ararat.json');
+    case 'plains-of-shinar':
+      return require('./assets/plains-of-shinar.json');
+    default:
+      return require('./assets/map.json');
+  }
+}
+
+const worldMap = loadMap(MAP_NAME);
 
 console.log(`Loading map: ${MAP_NAME}`);
 
@@ -32,6 +42,9 @@ import GamePlayerEntity from './src/game/entities/GamePlayerEntity';
 startServer(world => {
   // Load the world map
   world.loadMap(worldMap);
+
+  // Set the stormy skybox for the flood atmosphere
+  world.setSkyboxUri('skyboxes/stormy');
 
   // Initialize the game manager
   GameManager.instance.setup(world, 'normal');
@@ -73,17 +86,23 @@ startServer(world => {
     world.chatManager.sendBroadcastMessage('Game restarting...', 'FFFF00');
   });
 
-  // Set difficulty
+  // Set difficulty commands
   world.chatManager.registerCommand('/easy', player => {
-    world.chatManager.sendPlayerMessage(player, 'Difficulty commands coming soon!', 'AAAAAA');
+    GameManager.instance.setDifficulty('easy');
+    world.chatManager.sendBroadcastMessage('Difficulty set to EASY (10 pairs, slow flood)', '00FF00');
+    world.chatManager.sendBroadcastMessage('Type /restart to begin!', 'FFFF00');
   });
 
   world.chatManager.registerCommand('/normal', player => {
-    world.chatManager.sendPlayerMessage(player, 'Difficulty commands coming soon!', 'AAAAAA');
+    GameManager.instance.setDifficulty('normal');
+    world.chatManager.sendBroadcastMessage('Difficulty set to NORMAL (23 pairs)', 'FFAA00');
+    world.chatManager.sendBroadcastMessage('Type /restart to begin!', 'FFFF00');
   });
 
   world.chatManager.registerCommand('/hard', player => {
-    world.chatManager.sendPlayerMessage(player, 'Difficulty commands coming soon!', 'AAAAAA');
+    GameManager.instance.setDifficulty('hard');
+    world.chatManager.sendBroadcastMessage('Difficulty set to HARD (23 pairs, fast flood)', 'FF5500');
+    world.chatManager.sendBroadcastMessage('Type /restart to begin!', 'FFFF00');
   });
 
   // Debug: Spawn test animal

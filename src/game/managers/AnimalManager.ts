@@ -7,35 +7,31 @@ import AnimalEntity from '../entities/AnimalEntity';
 import GameConfig from '../GameConfig';
 
 // Spawn zones by tier and biome type
-// These coordinates should match the map layout
-// TODO: Update these coordinates to match actual map spawn points
 interface SpawnZone {
   position: Vector3Like;
   tier: number;
   tags: string[];
 }
 
-// Default spawn zones - spread across different elevations
-const SPAWN_ZONES: SpawnZone[] = [
-  // Tier 1 - Lower areas (flood risk)
-  { position: { x: -20, y: 5, z: -20 }, tier: 1, tags: ['grassland'] },
-  { position: { x: 20, y: 5, z: -20 }, tier: 1, tags: ['grassland'] },
-  { position: { x: 0, y: 5, z: -30 }, tier: 1, tags: ['grassland'] },
-  { position: { x: -15, y: 6, z: -15 }, tier: 1, tags: ['forest'] },
-  { position: { x: 15, y: 6, z: -15 }, tier: 1, tags: ['forest'] },
+// Map-specific spawn zones loaded from JSON files
+import mountAraratSpawnZones from '../../../assets/mount-ararat-spawn-zones.json';
+import plainsOfShinarSpawnZones from '../../../assets/plains-of-shinar-spawn-zones.json';
 
-  // Tier 2 - Mid elevation
-  { position: { x: -15, y: 12, z: -10 }, tier: 2, tags: ['grassland'] },
-  { position: { x: 15, y: 12, z: -10 }, tier: 2, tags: ['rocky'] },
-  { position: { x: 0, y: 14, z: -18 }, tier: 2, tags: ['forest'] },
-  { position: { x: -10, y: 15, z: 0 }, tier: 2, tags: ['grassland'] },
-  { position: { x: 10, y: 15, z: 0 }, tier: 2, tags: ['rocky'] },
+// Determine which map is loaded
+const MAP_NAME = process.env.MAP_NAME || 'mount-ararat';
 
-  // Tier 3 - Higher elevation (safer from flood)
-  { position: { x: -8, y: 22, z: 5 }, tier: 3, tags: ['rocky'] },
-  { position: { x: 8, y: 22, z: 5 }, tier: 3, tags: ['rocky'] },
-  { position: { x: 0, y: 25, z: 10 }, tier: 3, tags: ['grassland'] },
-];
+// Convert JSON spawn zones to SpawnZone format
+function loadSpawnZones(mapName: string): SpawnZone[] {
+  const rawZones = mapName === 'mount-ararat' ? mountAraratSpawnZones : plainsOfShinarSpawnZones;
+
+  return rawZones.map((zone: any) => ({
+    position: { x: zone.x, y: zone.y, z: zone.z },
+    tier: zone.tier,
+    tags: [zone.biome],
+  }));
+}
+
+const SPAWN_ZONES: SpawnZone[] = loadSpawnZones(MAP_NAME);
 
 export default class AnimalManager {
   private _world: World;

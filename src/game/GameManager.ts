@@ -14,6 +14,10 @@ import {
 import GameConfig, { type DifficultyKey } from './GameConfig';
 import AnimalManager from './managers/AnimalManager';
 import FloodManager from './managers/FloodManager';
+import WeatherManager from './managers/WeatherManager';
+import PowerUpManager from './managers/PowerUpManager';
+import ScoreManager from './managers/ScoreManager';
+import LeaderboardManager, { type LeaderboardEntry } from './managers/LeaderboardManager';
 import ArkGoalZone from './entities/ArkGoalZone';
 import AnimalEntity from './entities/AnimalEntity';
 
@@ -26,7 +30,7 @@ export enum GameState {
 }
 
 // Map configuration based on environment variable
-const MAP_NAME = process.env.MAP_NAME || 'plains-of-shinar';
+const MAP_NAME = process.env.MAP_NAME || 'mount-ararat';
 
 // Map-specific configurations
 const MAP_CONFIGS: Record<string, {
@@ -42,6 +46,13 @@ const MAP_CONFIGS: Record<string, {
     playerSpawn: { x: 0, y: 12, z: -50 },      // Southern flood plain (near start)
     arkModelOffset: { x: 0, y: 5, z: -5 },     // Raise 5 blocks, move forward 5 blocks toward water
     arkModelRotationY: 135,                     // Rotate 135 degrees to align with land
+  },
+  'mount-ararat': {
+    arkPosition: { x: 0, y: 34, z: 50 },       // Northern plateau at Y=32+ (Ark Deck)
+    goalZonePosition: { x: 0, y: 20, z: 14 },  // Drop-off at base of ramp leading to Ark
+    playerSpawn: { x: 0, y: 8, z: -50 },       // Southern Tier 1 area
+    arkModelOffset: { x: 0, y: 3, z: 0 },      // Slight elevation for model
+    arkModelRotationY: 180,                     // Facing south toward players
   },
   'original': {
     arkPosition: { x: 0, y: 35, z: 20 },
@@ -73,6 +84,10 @@ export default class GameManager {
   private _world: World | null = null;
   private _animalManager: AnimalManager | null = null;
   private _floodManager: FloodManager | null = null;
+  private _weatherManager: WeatherManager | null = null;
+  private _powerUpManager: PowerUpManager | null = null;
+  private _scoreManager: ScoreManager | null = null;
+  private _leaderboardManager: LeaderboardManager | null = null;
   private _arkGoalZone: ArkGoalZone | null = null;
   private _state: GameState = GameState.WAITING;
   private _difficulty: DifficultyKey = 'normal';
@@ -81,7 +96,59 @@ export default class GameManager {
   private _countdownInterval: NodeJS.Timeout | null = null;
   private _uiUpdateInterval: NodeJS.Timeout | null = null;
 
-  private constructor() {}
+  // Sound effects
+  private _victorySound: Audio;
+  private _defeatSound: Audio;
+  private _floodWarningSound: Audio;
+  private _countdownSound: Audio;
+  private _gameStartSound: Audio;
+  private _animalPickupSound: Audio;
+  private _animalReleaseSound: Audio;
+  private _powerUpSound: Audio;
+
+  private constructor() {
+    // Initialize sound effects
+    this._victorySound = new Audio({
+      uri: 'audio/sfx/collect.mp3',  // Victory fanfare (reuse collect for now)
+      loop: false,
+      volume: 1.0,
+    });
+    this._defeatSound = new Audio({
+      uri: 'audio/sfx/error.mp3',  // Defeat sound
+      loop: false,
+      volume: 1.0,
+    });
+    this._floodWarningSound = new Audio({
+      uri: 'audio/sfx/error.mp3',  // Flood warning alarm
+      loop: false,
+      volume: 0.8,
+    });
+    this._countdownSound = new Audio({
+      uri: 'audio/sfx/collect.mp3',  // Countdown beep
+      loop: false,
+      volume: 0.5,
+    });
+    this._gameStartSound = new Audio({
+      uri: 'audio/sfx/collect.mp3',  // Game start sound
+      loop: false,
+      volume: 0.8,
+    });
+    this._animalPickupSound = new Audio({
+      uri: 'audio/sfx/collect.mp3',  // Animal starts following
+      loop: false,
+      volume: 0.6,
+    });
+    this._animalReleaseSound = new Audio({
+      uri: 'audio/sfx/collect.mp3',  // Animal stops following
+      loop: false,
+      volume: 0.4,
+    });
+    this._powerUpSound = new Audio({
+      uri: 'audio/sfx/collect.mp3',  // Power-up collected
+      loop: false,
+      volume: 0.8,
+    });
+  }
 
   public static get instance(): GameManager {
     if (!GameManager._instance) {
@@ -104,6 +171,22 @@ export default class GameManager {
 
   public get floodManager(): FloodManager | null {
     return this._floodManager;
+  }
+
+  public get weatherManager(): WeatherManager | null {
+    return this._weatherManager;
+  }
+
+  public get powerUpManager(): PowerUpManager | null {
+    return this._powerUpManager;
+  }
+
+  public get scoreManager(): ScoreManager | null {
+    return this._scoreManager;
+  }
+
+  public get leaderboardManager(): LeaderboardManager | null {
+    return this._leaderboardManager;
   }
 
   public get pairsCollected(): number {
@@ -133,6 +216,22 @@ export default class GameManager {
     // Create managers
     this._animalManager = new AnimalManager(world);
     this._floodManager = new FloodManager(world, difficulty);
+    this._weatherManager = new WeatherManager(world);
+    this._powerUpManager = new PowerUpManager(world);
+    this._scoreManager = new ScoreManager(difficulty);
+    this._leaderboardManager = new LeaderboardManager();
+
+    // Load leaderboard data
+    this._leaderboardManager.load();
+
+    // Connect managers for power-up effects
+    this._powerUpManager.setFloodManager(this._floodManager);
+    this._powerUpManager.setAnimalManager(this._animalManager);
+
+    // Set up flood freeze check for power-up
+    this._floodManager.setFloodFrozenCheck(() => {
+      return this._powerUpManager?.isFloodFrozen() ?? false;
+    });
     this._arkGoalZone = new ArkGoalZone(world, {
       position: GOAL_ZONE_POSITION,  // Drop-off platform position
       arkModelPosition: ARK_POSITION,  // Actual Ark model position
@@ -151,6 +250,11 @@ export default class GameManager {
         this._animalManager.updateFloodLevel(height);
       }
 
+      // Update weather based on flood progress
+      if (this._weatherManager) {
+        this._weatherManager.setFloodProgress(this._floodManager?.progress ?? 0);
+      }
+
       // Check if flood reached the ark (defeat condition)
       if (height >= ARK_POSITION.y - 2) {
         this._handleDefeat();
@@ -158,7 +262,12 @@ export default class GameManager {
     });
 
     this._floodManager.onFloodWarning(() => {
+      this._floodWarningSound.play(world, true);
       this._broadcastMessage('The flood is rising!', '00AAFF');
+    });
+
+    this._floodManager.onPlayerDrowned((player) => {
+      this._handlePlayerDrowned(player);
     });
 
     // Set up ark goal zone callbacks
@@ -172,6 +281,30 @@ export default class GameManager {
           animal.followingPlayer,
           'You need two of the same animal!',
           'FF5555'
+        );
+      }
+    });
+
+    // Set up power-up callbacks
+    this._powerUpManager.onPowerUpCollected((player, type, config) => {
+      // Play power-up sound
+      this._powerUpSound.play(world, true);
+
+      // Award points for collecting power-up
+      if (this._scoreManager && GameConfig.instance.scoring.enabled) {
+        const points = this._scoreManager.awardPowerUpCollection(player);
+        this._world?.chatManager.sendPlayerMessage(player, `+${points} points!`, '00FFAA');
+      }
+      // UI update will happen automatically through broadcastUIUpdate
+    });
+
+    this._powerUpManager.onPowerUpExpired((player, type) => {
+      const typeConfig = GameConfig.instance.powerups.types[type];
+      if (typeConfig) {
+        this._world?.chatManager.sendPlayerMessage(
+          player,
+          `${typeConfig.display_name} expired!`,
+          'AAAAAA'
         );
       }
     });
@@ -195,12 +328,20 @@ export default class GameManager {
     this._state = GameState.COUNTDOWN;
     let countdown = COUNTDOWN_SECONDS;
 
+    // Play countdown sound
+    if (this._world) {
+      this._countdownSound.play(this._world, true);
+    }
     this._broadcastMessage(`Game starting in ${countdown}...`, 'FFFF00');
 
     this._countdownInterval = setInterval(() => {
       countdown--;
 
       if (countdown > 0) {
+        // Play countdown beep
+        if (this._world) {
+          this._countdownSound.play(this._world, true);
+        }
         this._broadcastMessage(`${countdown}...`, 'FFFF00');
       } else {
         if (this._countdownInterval) {
@@ -221,6 +362,9 @@ export default class GameManager {
     this._state = GameState.PLAYING;
     this._gameStartTime = Date.now();
 
+    // Play game start sound
+    this._gameStartSound.play(this._world, true);
+
     // Spawn animals
     this._animalManager.spawnInitialAnimals();
 
@@ -230,6 +374,21 @@ export default class GameManager {
     // Start the flood
     if (GameConfig.instance.flood.enabled) {
       this._floodManager.start();
+    }
+
+    // Start weather system (rain and sky darkening)
+    if (this._weatherManager) {
+      this._weatherManager.start();
+    }
+
+    // Start power-up system
+    if (this._powerUpManager && GameConfig.instance.powerups.enabled) {
+      this._powerUpManager.start();
+    }
+
+    // Start scoring system
+    if (this._scoreManager && GameConfig.instance.scoring.enabled) {
+      this._scoreManager.startGame(600); // 10 minute max game time for time bonus calculation
     }
 
     // Start UI update loop
@@ -253,6 +412,9 @@ export default class GameManager {
     const animalConfig = GameConfig.instance.getAnimalTypeById(animalType);
     const displayName = animalConfig?.display_name ?? animalType;
 
+    // Get the player who delivered (before releasing)
+    const deliveryPlayer = animal1.followingPlayer || animal2.followingPlayer;
+
     // Release animals from player
     animal1.stopFollowing();
     animal2.stopFollowing();
@@ -261,6 +423,12 @@ export default class GameManager {
     this._animalManager.removeAnimal(animal1);
     this._animalManager.removeAnimal(animal2);
     this._animalManager.respawnAnimalsIfNeeded(animalType);
+
+    // Award points for pair delivery
+    if (deliveryPlayer && this._scoreManager && GameConfig.instance.scoring.enabled) {
+      const points = this._scoreManager.awardPairDelivery(deliveryPlayer);
+      this._world?.chatManager.sendPlayerMessage(deliveryPlayer, `+${points} points for ${displayName} pair!`, 'FFD700');
+    }
 
     // Broadcast success
     this._broadcastMessage(`${displayName} pair saved!`, 'FFD700');
@@ -275,7 +443,7 @@ export default class GameManager {
   /**
    * Handle victory condition
    */
-  private _handleVictory(): void {
+  private async _handleVictory(): Promise<void> {
     if (this._state !== GameState.PLAYING) return;
 
     this._state = GameState.VICTORY;
@@ -285,38 +453,203 @@ export default class GameManager {
     const minutes = Math.floor(timeSeconds / 60);
     const seconds = timeSeconds % 60;
 
+    // Play victory sound
+    if (this._world) {
+      this._victorySound.play(this._world, true);
+    }
+
+    // Award completion bonuses and submit to leaderboard
+    const playerScores: Array<{ playerName: string; score: number; rank: number | null }> = [];
+    if (this._world && this._scoreManager && GameConfig.instance.scoring.enabled) {
+      const players = GameServer.instance.playerManager.getConnectedPlayersByWorld(this._world);
+
+      for (const player of players) {
+        // Award completion bonus
+        const bonusPoints = this._scoreManager.awardCompletionBonus(player, timeSeconds);
+        const totalScore = this._scoreManager.getPlayerScore(player.id);
+
+        this._world.chatManager.sendPlayerMessage(
+          player,
+          `Victory Bonus: +${bonusPoints} | Final Score: ${totalScore}`,
+          '00FF00'
+        );
+
+        // Submit to leaderboard
+        if (this._leaderboardManager && GameConfig.instance.leaderboard.enabled) {
+          const rank = await this._leaderboardManager.submitScore(
+            player.username,
+            totalScore,
+            this.pairsCollected,
+            timeSeconds,
+            this._difficulty
+          );
+
+          playerScores.push({
+            playerName: player.username,
+            score: totalScore,
+            rank,
+          });
+
+          if (rank !== null) {
+            this._world.chatManager.sendPlayerMessage(
+              player,
+              `You made the leaderboard! Rank #${rank}`,
+              'FFD700'
+            );
+          }
+        }
+      }
+    }
+
     this._broadcastMessage('VICTORY! All pairs have been saved!', '00FF00');
     this._broadcastMessage(`Time: ${minutes}:${seconds.toString().padStart(2, '0')}`, '00FF00');
 
-    // Send victory UI update
+    // Get leaderboard for UI
+    const leaderboard = await this._leaderboardManager?.getTopScores(10) ?? [];
+
+    // Send victory UI update with scores
     this._broadcastUIData({
       type: 'game-over',
       victory: true,
       time: timeSeconds,
       pairsCollected: this.pairsCollected,
+      playerScores,
+      leaderboard,
     });
   }
 
   /**
    * Handle defeat condition
+   * @param reason - The reason for defeat ('drowned' or 'flood')
    */
-  private _handleDefeat(): void {
+  private async _handleDefeat(reason: 'drowned' | 'flood' = 'flood'): Promise<void> {
     if (this._state !== GameState.PLAYING) return;
 
     this._state = GameState.DEFEAT;
     this._stopGame();
 
-    this._broadcastMessage('DEFEAT! The flood has reached the Ark!', 'FF0000');
+    const timeSeconds = this.elapsedTimeSeconds;
+
+    // Play defeat sound
+    if (this._world) {
+      this._defeatSound.play(this._world, true);
+    }
+
+    // Gather final scores (no completion bonus on defeat)
+    const playerScores: Array<{ playerName: string; score: number; rank: number | null }> = [];
+    if (this._world && this._scoreManager && GameConfig.instance.scoring.enabled) {
+      const players = GameServer.instance.playerManager.getConnectedPlayersByWorld(this._world);
+
+      for (const player of players) {
+        const totalScore = this._scoreManager.getPlayerScore(player.id);
+
+        this._world.chatManager.sendPlayerMessage(
+          player,
+          `Final Score: ${totalScore}`,
+          'FFAA00'
+        );
+
+        // Still submit to leaderboard (they earned points during gameplay)
+        if (this._leaderboardManager && GameConfig.instance.leaderboard.enabled && totalScore > 0) {
+          const rank = await this._leaderboardManager.submitScore(
+            player.username,
+            totalScore,
+            this.pairsCollected,
+            timeSeconds,
+            this._difficulty
+          );
+
+          playerScores.push({
+            playerName: player.username,
+            score: totalScore,
+            rank,
+          });
+
+          if (rank !== null) {
+            this._world.chatManager.sendPlayerMessage(
+              player,
+              `You made the leaderboard! Rank #${rank}`,
+              'FFD700'
+            );
+          }
+        }
+      }
+    }
+
+    // Show appropriate defeat message based on reason
+    const defeatMessage = reason === 'drowned'
+      ? 'DEFEAT! You drowned in the flood!'
+      : 'DEFEAT! The flood has reached the Ark!';
+    this._broadcastMessage(defeatMessage, 'FF0000');
     this._broadcastMessage(`Pairs saved: ${this.pairsCollected}/${this._requiredPairs}`, 'FFAA00');
 
-    // Send defeat UI update
+    // Get leaderboard for UI
+    const leaderboard = await this._leaderboardManager?.getTopScores(10) ?? [];
+
+    // Send defeat UI update with scores
     this._broadcastUIData({
       type: 'game-over',
       victory: false,
+      defeatReason: reason,
       pairsCollected: this.pairsCollected,
       requiredPairs: this._requiredPairs,
+      playerScores,
+      leaderboard,
     });
   }
+
+  /**
+   * Handle when a player drowns (stamina reaches zero)
+   * Drowning now triggers game over - single life design for leaderboard integrity
+   */
+  private _handlePlayerDrowned(player: Player): void {
+    if (!this._world || this._state !== GameState.PLAYING) return;
+
+    // Release any animals following this player
+    if (this._animalManager) {
+      this._animalManager.releaseAnimalsFromPlayer(player);
+    }
+
+    // Notify the player they drowned
+    this._world.chatManager.sendPlayerMessage(player, 'You drowned!', 'FF4444');
+
+    // Trigger game over (single life - no respawning)
+    this._handleDefeat('drowned');
+  }
+
+  /**
+   * PRESERVED FOR FUTURE USE: Respawn-based drowning handler
+   * If we want to re-enable respawning in the future, uncomment this code
+   * and call it from _handlePlayerDrowned instead of _handleDefeat()
+   *
+   * private _handlePlayerDrownedWithRespawn(player: Player): void {
+   *   if (!this._world || this._state !== GameState.PLAYING) return;
+   *
+   *   // Release any animals following this player
+   *   if (this._animalManager) {
+   *     this._animalManager.releaseAnimalsFromPlayer(player);
+   *   }
+   *
+   *   // Teleport player back to spawn
+   *   const playerEntities = this._world.entityManager.getPlayerEntitiesByPlayer(player);
+   *   playerEntities.forEach(entity => {
+   *     entity.setPosition(PLAYER_SPAWN_POSITION);
+   *     // Clear velocity so they don't keep moving
+   *     entity.setLinearVelocity({ x: 0, y: 0, z: 0 });
+   *   });
+   *
+   *   // Reset swimming state so they can swim again after respawn
+   *   if (this._floodManager) {
+   *     this._floodManager.resetPlayerSwimmingState(player.id);
+   *   }
+   *
+   *   // Play defeat sound
+   *   this._defeatSound.play(this._world);
+   *
+   *   // Update their UI
+   *   this._sendUIUpdate(player);
+   * }
+   */
 
   /**
    * Stop the game (cleanup)
@@ -324,6 +657,14 @@ export default class GameManager {
   private _stopGame(): void {
     if (this._floodManager) {
       this._floodManager.stop();
+    }
+
+    if (this._weatherManager) {
+      this._weatherManager.stop();
+    }
+
+    if (this._powerUpManager) {
+      this._powerUpManager.stop();
     }
 
     if (this._arkGoalZone) {
@@ -351,10 +692,90 @@ export default class GameManager {
       this._floodManager.reset();
     }
 
+    if (this._weatherManager) {
+      this._weatherManager.reset();
+    }
+
+    if (this._powerUpManager) {
+      this._powerUpManager.reset();
+    }
+
+    if (this._scoreManager) {
+      this._scoreManager.reset();
+    }
+
     this._gameStartTime = 0;
     this._state = GameState.WAITING;
 
     this._broadcastUIData({ type: 'reset' });
+  }
+
+  /**
+   * Change difficulty and restart the game
+   */
+  public setDifficulty(difficulty: DifficultyKey): void {
+    if (!this._world) return;
+
+    // Stop current game
+    this._stopGame();
+
+    // Update difficulty
+    this._difficulty = difficulty;
+    const difficultyConfig = GameConfig.instance.getDifficultyConfig(difficulty);
+    this._requiredPairs = difficultyConfig.required_pairs_total;
+
+    // Recreate flood manager with new difficulty
+    if (this._floodManager) {
+      this._floodManager.reset();
+    }
+    this._floodManager = new FloodManager(this._world, difficulty);
+
+    // Set up flood callbacks again
+    this._floodManager.onFloodRise((height, max) => {
+      this._broadcastUIUpdate();
+      if (this._animalManager) {
+        this._animalManager.updateFloodLevel(height);
+      }
+      // Update weather based on flood progress
+      if (this._weatherManager) {
+        this._weatherManager.setFloodProgress(this._floodManager?.progress ?? 0);
+      }
+      if (height >= ARK_POSITION.y - 2) {
+        this._handleDefeat();
+      }
+    });
+
+    this._floodManager.onFloodWarning(() => {
+      this._floodWarningSound.play(this._world!, true);
+      this._broadcastMessage('The flood is rising!', '00AAFF');
+    });
+
+    this._floodManager.onPlayerDrowned((player) => {
+      this._handlePlayerDrowned(player);
+    });
+
+    // Reset animals
+    if (this._animalManager) {
+      this._animalManager.despawnAllAnimals();
+      this._animalManager.resetPairsCollected();
+    }
+
+    // Reset weather
+    if (this._weatherManager) {
+      this._weatherManager.reset();
+    }
+
+    this._gameStartTime = 0;
+    this._state = GameState.WAITING;
+
+    this._broadcastUIData({ type: 'reset' });
+  }
+
+  /**
+   * Get current difficulty
+   */
+  public get difficulty(): DifficultyKey {
+    return this._difficulty;
   }
 
   /**
@@ -363,6 +784,11 @@ export default class GameManager {
   public onPlayerJoin(player: Player, playerEntity: PlayerEntity): void {
     // Load UI for this player
     player.ui.load('ui/index.html');
+
+    // Register player for scoring
+    if (this._scoreManager && GameConfig.instance.scoring.enabled) {
+      this._scoreManager.registerPlayer(player);
+    }
 
     // Send initial game state
     this._sendUIUpdate(player);
@@ -392,6 +818,16 @@ export default class GameManager {
     if (this._floodManager) {
       this._floodManager.removePlayerSwimmingState(player.id);
     }
+
+    // Clean up power-up effects
+    if (this._powerUpManager) {
+      this._powerUpManager.removePlayer(player.id);
+    }
+
+    // Clean up score tracking
+    if (this._scoreManager) {
+      this._scoreManager.removePlayer(player.id);
+    }
   }
 
   /**
@@ -404,6 +840,10 @@ export default class GameManager {
       if (animal.followingPlayer === player) {
         // Release this animal
         animal.stopFollowing();
+        // Play release sound
+        if (this._world) {
+          this._animalReleaseSound.play(this._world, true);
+        }
         this._world?.chatManager.sendPlayerMessage(player, `${animal.animalType} stopped following you.`, 'AAAAAA');
         return true;
       }
@@ -414,6 +854,10 @@ export default class GameManager {
     const success = this._animalManager.tryFollowPlayer(animal, player);
 
     if (success) {
+      // Play pickup sound
+      if (this._world) {
+        this._animalPickupSound.play(this._world, true);
+      }
       this._world?.chatManager.sendPlayerMessage(player, `${animal.animalType} is now following you!`, '00FF00');
     } else {
       this._world?.chatManager.sendPlayerMessage(player, 'You can only have 2 animals following you!', 'FF5555');
@@ -464,12 +908,72 @@ export default class GameManager {
   }
 
   /**
+   * Get all animal positions for mini-map UI
+   */
+  private _getAnimalPositionsForUI(): Array<{x: number, z: number, type: string, isFollowing: boolean}> {
+    if (!this._animalManager) return [];
+
+    return this._animalManager.animals.map(animal => ({
+      x: Math.round(animal.position.x),
+      z: Math.round(animal.position.z),
+      type: animal.animalType,
+      isFollowing: animal.isFollowing
+    }));
+  }
+
+  /**
+   * Get map bounds based on current map
+   */
+  private _getMapBounds(): {minX: number, maxX: number, minZ: number, maxZ: number} {
+    const bounds: Record<string, {minX: number, maxX: number, minZ: number, maxZ: number}> = {
+      'mount-ararat': { minX: -65, maxX: 65, minZ: -65, maxZ: 65 },
+      'plains-of-shinar': { minX: -80, maxX: 80, minZ: -80, maxZ: 80 }
+    };
+    return bounds[MAP_NAME] || bounds['mount-ararat'];
+  }
+
+  /**
+   * Get positions of animals matching the player's single following animal
+   * Only returns data when player has exactly 1 animal following
+   */
+  private _getMatchingAnimalPositions(player: Player): Array<{x: number, z: number}> | null {
+    if (!this._animalManager) return null;
+
+    const following = this._animalManager.getAnimalsFollowingPlayer(player);
+
+    // Only show arrows when player has exactly 1 animal
+    if (following.length !== 1) return null;
+
+    const targetType = following[0].animalType;
+
+    // Find all other animals of the same type that are NOT following anyone
+    return this._animalManager.animals
+      .filter(a => a.animalType === targetType && !a.isFollowing)
+      .map(a => ({
+        x: Math.round(a.position.x),
+        z: Math.round(a.position.z)
+      }));
+  }
+
+  /**
    * Send UI update to a specific player
    */
   private _sendUIUpdate(player: Player): void {
     // Get swimming state for this player
     const isSwimming = this._floodManager?.isPlayerSwimming(player.id) ?? false;
     const swimmingStamina = this._floodManager?.getPlayerSwimmingStamina(player.id) ?? 100;
+
+    // Get animals following this player
+    const followingAnimals = this._animalManager?.getAnimalsFollowingPlayer(player).map(a => a.animalType) ?? [];
+
+    // Get player position for mini-map
+    const playerEntities = this._world?.entityManager.getPlayerEntitiesByPlayer(player);
+    const playerPos = playerEntities && playerEntities.length > 0
+      ? { x: Math.round(playerEntities[0].position.x), z: Math.round(playerEntities[0].position.z) }
+      : { x: 0, z: 0 };
+
+    // Get score data
+    const playerScore = this._scoreManager?.getPlayerScore(player.id) ?? 0;
 
     player.ui.sendData({
       type: 'game-state',
@@ -481,6 +985,17 @@ export default class GameManager {
       elapsedTime: this.elapsedTimeSeconds,
       isSwimming: isSwimming,
       swimmingStamina: swimmingStamina,
+      followingAnimals: followingAnimals,
+      // Mini-map and arrow data
+      playerPosition: playerPos,
+      animalPositions: this._getAnimalPositionsForUI(),
+      arkPosition: { x: GOAL_ZONE_POSITION.x, z: GOAL_ZONE_POSITION.z },
+      mapBounds: this._getMapBounds(),
+      matchingAnimals: this._getMatchingAnimalPositions(player),
+      // Power-up data
+      activePowerUps: this._powerUpManager?.getActiveEffectsForUI(player.id) ?? [],
+      // Score data
+      score: playerScore,
     });
   }
 

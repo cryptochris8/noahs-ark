@@ -1,0 +1,90 @@
+[
+  {
+    "id": "south-west",
+    "x": -35,
+    "z": -45,
+    "y": 7,
+    "tier": 1,
+    "biome": "grassland"
+  },
+  {
+    "id": "south-east",
+    "x": 35,
+    "z": -45,
+    "y": 7,
+    "tier": 1,
+    "biome": "grassland"
+  },
+  {
+    "id": "south-center-west",
+    "x": -25,
+    "z": -35,
+    "y": 9,
+    "tier": 1,
+    "biome": "grassland"
+  },
+  {
+    "id": "south-center-east",
+    "x": 25,
+    "z": -35,
+    "y": 9,
+    "tier": 1,
+    "biome": "grassland"
+  },
+  {
+    "id": "mid-west",
+    "x": -40,
+    "z": -10,
+    "y": 15,
+    "tier": 2,
+    "biome": "forest"
+  },
+  {
+    "id": "mid-east",
+    "x": 40,
+    "z": -10,
+    "y": 15,
+    "tier": 2,
+    "biome": "grassland"
+  },
+  {
+    "id": "mid-center-west",
+    "x": -30,
+    "z": 5,
+    "y": 18,
+    "tier": 2,
+    "biome": "forest"
+  },
+  {
+    "id": "mid-center-east",
+    "x": 30,
+    "z": 5,
+    "y": 18,
+    "tier": 2,
+    "biome": "grassland"
+  },
+  {
+    "id": "highland-west",
+    "x": -35,
+    "z": 25,
+    "y": 25,
+    "tier": 3,
+    "biome": "rocky"
+  },
+  {
+    "id": "highland-east",
+    "x": 35,
+    "z": 25,
+    "y": 25,
+    "tier": 3,
+    "biome": "rocky"
+  },
+  {
+    "id": "near-ark",
+    "x": 0,
+    "z": 20,
+    "y": 28,
+    "tier": 3,
+    "biome": "rocky"
+  }
+]

@@ -4,6 +4,7 @@
 
 import {
   DefaultPlayerEntity,
+  DefaultPlayerEntityController,
   BaseEntityControllerEvent,
   CollisionGroup,
   type Player,
@@ -16,9 +17,14 @@ import AnimalEntity from './AnimalEntity';
 
 const INTERACT_REACH = 3.5;
 
+// Base movement speeds
+const BASE_RUN_VELOCITY = 8;
+const BASE_WALK_VELOCITY = 4;
+
 export default class GamePlayerEntity extends DefaultPlayerEntity {
   private _lastInteractTime: number = 0;
   private _interactCooldownMs: number = 500;
+  private _speedMultiplier: number = 1.0;
 
   constructor(player: Player) {
     super({
@@ -28,6 +34,33 @@ export default class GamePlayerEntity extends DefaultPlayerEntity {
 
     // Set up input handling (controller is guaranteed after super for DefaultPlayerEntity)
     this.controller!.on(BaseEntityControllerEvent.TICK_WITH_PLAYER_INPUT, this._onTickWithPlayerInput.bind(this));
+  }
+
+  /**
+   * Apply a speed multiplier (for Speed Boots power-up)
+   */
+  public setSpeedMultiplier(multiplier: number): void {
+    this._speedMultiplier = multiplier;
+    this._updateControllerSpeed();
+  }
+
+  /**
+   * Reset speed to normal
+   */
+  public resetSpeed(): void {
+    this._speedMultiplier = 1.0;
+    this._updateControllerSpeed();
+  }
+
+  /**
+   * Update the controller's velocity settings
+   */
+  private _updateControllerSpeed(): void {
+    const controller = this.controller as DefaultPlayerEntityController;
+    if (!controller) return;
+
+    controller.runVelocity = BASE_RUN_VELOCITY * this._speedMultiplier;
+    controller.walkVelocity = BASE_WALK_VELOCITY * this._speedMultiplier;
   }
 
   public override spawn(world: World, position: Vector3Like): void {

@@ -38,9 +38,47 @@
     "catchup_distance_threshold": 8
   },
   "powerups": {
-    "enabled": false,
-    "spawn_interval_seconds": 45,
-    "max_active_powerups": 3
+    "enabled": true,
+    "spawn_interval_seconds": 30,
+    "max_active_powerups": 5,
+    "types": {
+      "speed_boots": {
+        "display_name": "Speed Boots",
+        "duration_seconds": 15,
+        "effect_multiplier": 1.8,
+        "color": "#00FFFF"
+      },
+      "animal_magnet": {
+        "display_name": "Animal Magnet",
+        "duration_seconds": 12,
+        "effect_radius": 15,
+        "color": "#FF00FF"
+      },
+      "flood_freeze": {
+        "display_name": "Flood Freeze",
+        "duration_seconds": 10,
+        "color": "#00AAFF"
+      }
+    }
+  },
+  "scoring": {
+    "enabled": true,
+    "points_per_pair": 100,
+    "speed_bonus_threshold_seconds": 30,
+    "speed_bonus_points": 50,
+    "powerup_collect_points": 25,
+    "completion_bonus": 500,
+    "time_bonus_per_second_remaining": 5,
+    "difficulty_multipliers": {
+      "easy": 0.75,
+      "normal": 1.0,
+      "hard": 1.5
+    }
+  },
+  "leaderboard": {
+    "enabled": true,
+    "max_entries": 10,
+    "storage_file": "leaderboard.json"
   },
   "ui": {
     "show_timer": true,
