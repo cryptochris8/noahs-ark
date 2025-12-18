@@ -109,7 +109,7 @@ export default class GameManager {
   private constructor() {
     // Initialize sound effects
     this._victorySound = new Audio({
-      uri: 'audio/sfx/collect.mp3',  // Victory fanfare (reuse collect for now)
+      uri: 'audio/sfx/victory.mp3',
       loop: false,
       volume: 1.0,
     });
@@ -119,7 +119,7 @@ export default class GameManager {
       volume: 1.0,
     });
     this._floodWarningSound = new Audio({
-      uri: 'audio/sfx/error.mp3',  // Flood warning alarm
+      uri: 'audio/sfx/flood-warning.mp3',
       loop: false,
       volume: 0.8,
     });
@@ -129,7 +129,7 @@ export default class GameManager {
       volume: 0.5,
     });
     this._gameStartSound = new Audio({
-      uri: 'audio/sfx/collect.mp3',  // Game start sound
+      uri: 'audio/sfx/game-start.mp3',
       loop: false,
       volume: 0.8,
     });
@@ -144,7 +144,7 @@ export default class GameManager {
       volume: 0.4,
     });
     this._powerUpSound = new Audio({
-      uri: 'audio/sfx/collect.mp3',  // Power-up collected
+      uri: 'audio/sfx/power-up.mp3',
       loop: false,
       volume: 0.8,
     });

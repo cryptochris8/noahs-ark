@@ -61,9 +61,8 @@ export default class ArkGoalZone {
     this._modelRotationY = options.modelRotationY ?? 0;
 
     // Create success/fail audio
-    // TODO: Replace with custom ark horn sound
     this._pairSuccessAudio = new Audio({
-      uri: 'audio/sfx/collect.mp3',
+      uri: 'audio/sfx/pair-saved.mp3',
       loop: false,
       volume: 0.8,
     });
