@@ -58,6 +58,12 @@ startServer(world => {
     const playerEntity = new GamePlayerEntity(player);
     playerEntity.spawn(world, spawnPosition);
 
+    // Make player face the ark (north) instead of the flood
+    // Small delay to ensure camera is attached to entity
+    setTimeout(() => {
+      player.camera.lookAtPosition({ x: 0, y: 34, z: 50 }); // Look toward ark
+    }, 100);
+
     // Notify the game manager
     GameManager.instance.onPlayerJoin(player, playerEntity);
   });
@@ -170,6 +176,24 @@ startServer(world => {
     world.chatManager.sendPlayerMessage(player, `Flood height set to Y=${newHeight}`, '00FFFF');
   });
 
+  // Test rain command
+  world.chatManager.registerCommand('/testrain', player => {
+    const weatherManager = GameManager.instance.weatherManager;
+    if (!weatherManager) {
+      world.chatManager.sendPlayerMessage(player, 'WeatherManager not initialized!', 'FF0000');
+      return;
+    }
+
+    if (weatherManager.isActive) {
+      weatherManager.stop();
+      world.chatManager.sendPlayerMessage(player, 'Rain STOPPED', 'FFAA00');
+    } else {
+      weatherManager.setFloodProgress(0.5); // Set to 50% for visible rain
+      weatherManager.start();
+      world.chatManager.sendPlayerMessage(player, 'Rain STARTED at 50% intensity', '00FFFF');
+    }
+  });
+
   // Help command
   world.chatManager.registerCommand('/help', player => {
     world.chatManager.sendPlayerMessage(player, '=== Noah\'s Ark Rush ===', 'FFD700');
@@ -180,6 +204,6 @@ startServer(world => {
     world.chatManager.sendPlayerMessage(player, '  Shift - Sprint', 'AAAAAA');
     world.chatManager.sendPlayerMessage(player, '  E - Interact with animals', 'AAAAAA');
     world.chatManager.sendPlayerMessage(player, '  F - Deliver animals at the Ark', 'AAAAAA');
-    world.chatManager.sendPlayerMessage(player, 'Commands: /restart, /help, /testflood, /floodheight', 'AAAAAA');
+    world.chatManager.sendPlayerMessage(player, 'Commands: /restart, /help, /testflood, /floodheight, /testrain', 'AAAAAA');
   });
 });

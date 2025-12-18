@@ -29,78 +29,78 @@ interface WeatherStage {
   rainVolume: number;
 }
 
-// Weather configuration
+// Weather configuration - BIBLICAL FLOOD intensity rain!
 const WEATHER_STAGES: WeatherStage[] = [
   {
-    // Stage 0: Clear skies (0-10%)
+    // Stage 0: Rain begins (0-10%)
     minProgress: 0,
     maxProgress: 0.1,
-    rainRate: 0,
-    skyboxIntensity: 1.0,
-    ambientLightIntensity: 1.0,
-    directionalLightIntensity: 3.0,
-    fogNear: 500,
+    rainRate: 2500, // 5x - visible from start
+    skyboxIntensity: 0.95,
+    ambientLightIntensity: 0.95,
+    directionalLightIntensity: 2.8,
+    fogNear: 450,
     fogFar: 550,
     fogColor: { r: 200, g: 220, b: 255 },
-    rainVolume: 0,
+    rainVolume: 0.25,
   },
   {
-    // Stage 1: Light drizzle (10-30%)
+    // Stage 1: Steady rain (10-30%)
     minProgress: 0.1,
     maxProgress: 0.3,
-    rainRate: 50,
+    rainRate: 4000,
     skyboxIntensity: 0.85,
     ambientLightIntensity: 0.9,
     directionalLightIntensity: 2.5,
     fogNear: 400,
     fogFar: 500,
     fogColor: { r: 180, g: 200, b: 230 },
-    rainVolume: 0.2,
+    rainVolume: 0.35,
   },
   {
-    // Stage 2: Light rain (30-50%)
+    // Stage 2: Heavy rain (30-50%)
     minProgress: 0.3,
     maxProgress: 0.5,
-    rainRate: 150,
+    rainRate: 6000,
     skyboxIntensity: 0.7,
     ambientLightIntensity: 0.75,
     directionalLightIntensity: 2.0,
     fogNear: 300,
     fogFar: 400,
     fogColor: { r: 150, g: 170, b: 200 },
-    rainVolume: 0.4,
+    rainVolume: 0.5,
   },
   {
-    // Stage 3: Moderate rain (50-70%)
+    // Stage 3: Downpour (50-70%)
     minProgress: 0.5,
     maxProgress: 0.7,
-    rainRate: 300,
+    rainRate: 8000,
     skyboxIntensity: 0.5,
     ambientLightIntensity: 0.6,
     directionalLightIntensity: 1.5,
     fogNear: 200,
     fogFar: 350,
     fogColor: { r: 120, g: 140, b: 180 },
-    rainVolume: 0.6,
+    rainVolume: 0.7,
   },
   {
-    // Stage 4: Heavy rain (70-85%)
+    // Stage 4: Deluge (70-85%)
     minProgress: 0.7,
     maxProgress: 0.85,
-    rainRate: 500,
+    rainRate: 10000,
     skyboxIntensity: 0.35,
     ambientLightIntensity: 0.45,
     directionalLightIntensity: 1.0,
     fogNear: 100,
     fogFar: 250,
     fogColor: { r: 100, g: 120, b: 160 },
-    rainVolume: 0.8,
+    rainVolume: 0.85,
   },
   {
-    // Stage 5: Torrential downpour (85-100%)
+    // Stage 5: BIBLICAL FLOOD (85-100%)
     minProgress: 0.85,
     maxProgress: 1.0,
-    rainRate: 800,
+    rainRate: 12500,
     skyboxIntensity: 0.2,
     ambientLightIntensity: 0.3,
     directionalLightIntensity: 0.5,
@@ -111,11 +111,26 @@ const WEATHER_STAGES: WeatherStage[] = [
   },
 ];
 
-const RAIN_TEXTURE_URI = 'textures/particles/raindrop.png';
+// Use built-in smoke particle texture (works reliably)
+// Can be replaced with custom 'particles/raindrop.png' if placed in assets/particles/
+const RAIN_TEXTURE_URI = 'particles/smoke.png';
+
+// Rain emitter positions - grid across the play area
+const RAIN_EMITTER_POSITIONS = [
+  { x: 0, z: 0 },      // Center
+  { x: -40, z: -40 },  // SW
+  { x: 40, z: -40 },   // SE
+  { x: -40, z: 40 },   // NW
+  { x: 40, z: 40 },    // NE
+  { x: 0, z: -50 },    // South (near player spawn)
+  { x: 0, z: 50 },     // North (near ark)
+  { x: -50, z: 0 },    // West
+  { x: 50, z: 0 },     // East
+];
 
 export default class WeatherManager {
   private _world: World;
-  private _rainEmitter: ParticleEmitter | null = null;
+  private _rainEmitters: ParticleEmitter[] = [];
   private _rainAudio: Audio | null = null;
   private _currentProgress: number = 0;
   private _isActive: boolean = false;
@@ -138,27 +153,33 @@ export default class WeatherManager {
     this._originalFogNear = world.fogNear;
     this._originalFogFar = world.fogFar;
 
-    // Create rain particle emitter (positioned above the map center, high up)
-    this._rainEmitter = new ParticleEmitter({
-      textureUri: RAIN_TEXTURE_URI,
-      position: { x: 0, y: 80, z: 0 }, // High above the map
-      positionVariance: { x: 100, y: 10, z: 100 }, // Wide spread
-      velocity: { x: 0, y: -25, z: 0 }, // Falling down fast
-      velocityVariance: { x: 2, y: 5, z: 2 }, // Slight variation
-      gravity: { x: 0, y: -5, z: 0 }, // Additional gravity pull
-      lifetime: 4, // 4 seconds to fall
-      lifetimeVariance: 1,
-      rate: 0, // Start with no rain
-      maxParticles: 5000,
-      sizeStart: 0.15, // Small raindrops
-      sizeEnd: 0.1,
-      sizeStartVariance: 0.05,
-      opacityStart: 0.7,
-      opacityEnd: 0.3,
-      colorStart: { r: 200, g: 220, b: 255 }, // Light blue-white
-      colorEnd: { r: 150, g: 180, b: 220 }, // Slightly darker blue
-      transparent: true,
-    });
+    // Create MULTIPLE rain emitters across the map for dense coverage
+    // Each emitter covers a smaller area but with more density
+    for (const pos of RAIN_EMITTER_POSITIONS) {
+      const emitter = new ParticleEmitter({
+        textureUri: RAIN_TEXTURE_URI,
+        position: { x: pos.x, y: 50, z: pos.z },
+        positionVariance: { x: 25, y: 5, z: 25 }, // Smaller area per emitter
+        velocity: { x: -1, y: -8, z: 0 },
+        velocityVariance: { x: 1.5, y: 2, z: 1.5 },
+        gravity: { x: 0, y: -12, z: 0 },
+        lifetime: 4,
+        lifetimeVariance: 1,
+        rate: 300, // Good rate per emitter (9 emitters = 2700 total)
+        rateVariance: 50,
+        maxParticles: 2000, // Per emitter
+        sizeStart: 0.25, // Visible drops
+        sizeEnd: 0.15,
+        sizeStartVariance: 0.08,
+        opacityStart: 0.85,
+        opacityStartVariance: 0.1,
+        opacityEnd: 0.3,
+        colorStart: { r: 180, g: 200, b: 255 },
+        colorEnd: { r: 150, g: 180, b: 230 },
+        transparent: true,
+      });
+      this._rainEmitters.push(emitter);
+    }
 
     // Create rain audio (looping ambient rain sound)
     this._rainAudio = new Audio({
@@ -175,9 +196,9 @@ export default class WeatherManager {
     if (this._isActive) return;
     this._isActive = true;
 
-    // Spawn the rain emitter
-    if (this._rainEmitter) {
-      this._rainEmitter.spawn(this._world);
+    // Spawn all rain emitters
+    for (const emitter of this._rainEmitters) {
+      emitter.spawn(this._world);
     }
 
     // Start rain audio
@@ -205,9 +226,11 @@ export default class WeatherManager {
       this._updateInterval = null;
     }
 
-    // Despawn rain emitter
-    if (this._rainEmitter && this._rainEmitter.isSpawned) {
-      this._rainEmitter.despawn();
+    // Despawn all rain emitters
+    for (const emitter of this._rainEmitters) {
+      if (emitter.isSpawned) {
+        emitter.despawn();
+      }
     }
 
     // Stop rain audio
@@ -293,17 +316,14 @@ export default class WeatherManager {
 
     const weather = this._getInterpolatedWeather();
 
-    // Update rain particle rate
-    if (this._rainEmitter && this._rainEmitter.isSpawned) {
-      this._rainEmitter.setRate(weather.rainRate);
+    // Update rain particle rate on ALL emitters
+    // Scale the rate based on weather stage (base rate per emitter scales with flood)
+    const ratePerEmitter = Math.round(weather.rainRate / RAIN_EMITTER_POSITIONS.length);
 
-      // Adjust position variance based on rain intensity
-      const spreadFactor = 1 + (weather.rainRate / 200);
-      this._rainEmitter.setPositionVariance({
-        x: 80 * spreadFactor,
-        y: 10,
-        z: 80 * spreadFactor,
-      });
+    for (const emitter of this._rainEmitters) {
+      if (emitter.isSpawned) {
+        emitter.setRate(ratePerEmitter);
+      }
     }
 
     // Update world lighting

@@ -48,11 +48,11 @@ const MAP_CONFIGS: Record<string, {
     arkModelRotationY: 135,                     // Rotate 135 degrees to align with land
   },
   'mount-ararat': {
-    arkPosition: { x: 0, y: 34, z: 50 },       // Northern plateau at Y=32+ (Ark Deck)
+    arkPosition: { x: 0, y: 34, z: 50 },       // Parallel orientation on mountaintop
     goalZonePosition: { x: 0, y: 20, z: 14 },  // Drop-off at base of ramp leading to Ark
     playerSpawn: { x: 0, y: 8, z: -50 },       // Southern Tier 1 area
     arkModelOffset: { x: 0, y: 3, z: 0 },      // Slight elevation for model
-    arkModelRotationY: 180,                     // Facing south toward players
+    arkModelRotationY: 135,                     // Parallel to flood, door facing south
   },
   'original': {
     arkPosition: { x: 0, y: 35, z: 20 },
