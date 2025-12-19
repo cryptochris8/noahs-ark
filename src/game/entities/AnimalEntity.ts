@@ -52,6 +52,14 @@ const ANIMAL_MODELS: Record<string, string> = {
 // Fallback model if specific animal model not found
 const DEFAULT_ANIMAL_MODEL = 'models/npcs/cow.gltf';
 
+// Map boundaries to keep animals in playable area
+const MAP_NAME = process.env.MAP_NAME || 'mount-ararat';
+const MAP_BOUNDS: Record<string, { minX: number; maxX: number; minZ: number; maxZ: number }> = {
+  'mount-ararat': { minX: -60, maxX: 60, minZ: -60, maxZ: 55 },
+  'plains-of-shinar': { minX: -75, maxX: 75, minZ: -75, maxZ: 70 },
+};
+const CURRENT_BOUNDS = MAP_BOUNDS[MAP_NAME] || MAP_BOUNDS['mount-ararat'];
+
 export interface AnimalEntityOptions {
   animalType: string;
   spawnTier?: number;
@@ -113,6 +121,25 @@ export default class AnimalEntity extends Entity {
 
   public get pathfindingController(): PathfindingEntityController {
     return this.controller as PathfindingEntityController;
+  }
+
+  /**
+   * Clamp a position to stay within map boundaries
+   */
+  private _clampToBounds(pos: Vector3Like): Vector3Like {
+    return {
+      x: Math.max(CURRENT_BOUNDS.minX, Math.min(CURRENT_BOUNDS.maxX, pos.x)),
+      y: pos.y,
+      z: Math.max(CURRENT_BOUNDS.minZ, Math.min(CURRENT_BOUNDS.maxZ, pos.z)),
+    };
+  }
+
+  /**
+   * Check if position is within map boundaries
+   */
+  private _isWithinBounds(pos: Vector3Like): boolean {
+    return pos.x >= CURRENT_BOUNDS.minX && pos.x <= CURRENT_BOUNDS.maxX &&
+           pos.z >= CURRENT_BOUNDS.minZ && pos.z <= CURRENT_BOUNDS.maxZ;
   }
 
   /**
@@ -193,11 +220,12 @@ export default class AnimalEntity extends Entity {
     const myPos = this.position;
 
     // Calculate flee target - move toward the ark area (higher Z) and uphill
-    this._fleeTarget = {
+    // Clamp to map boundaries to prevent animals from escaping
+    this._fleeTarget = this._clampToBounds({
       x: myPos.x + (Math.random() - 0.5) * 8, // Some random lateral movement
       y: myPos.y + 3,                          // Move up gradually
       z: myPos.z + 10 + Math.random() * 8,     // Move toward higher ground (ark direction)
-    };
+    });
 
     // Start walking animation
     this.stopModelAnimations(['idle']);
@@ -249,6 +277,20 @@ export default class AnimalEntity extends Entity {
 
   private _onTick(): void {
     if (!this.isSpawned || !this.world) return;
+
+    // Check if animal is out of bounds and bring it back
+    if (!this._isWithinBounds(this.position)) {
+      const safePos = this._clampToBounds(this.position);
+      this.setPosition(safePos);
+      // Clear any current movement targets
+      this._wanderTarget = null;
+      this._fleeTarget = null;
+      this._isFleeingFlood = false;
+      this.stopModelAnimations(['walk']);
+      this.startModelLoopedAnimations(['idle']);
+      this._startIdleWander();
+      return;
+    }
 
     if (this._isFollowing && this._followingPlayer) {
       this._updateFollowBehavior();
@@ -385,11 +427,12 @@ export default class AnimalEntity extends Entity {
       const wanderRadius = 2 + Math.random() * 3; // Smaller radius = easier paths
       const angle = Math.random() * Math.PI * 2;
 
-      this._wanderTarget = {
+      // Clamp wander target to map boundaries
+      this._wanderTarget = this._clampToBounds({
         x: myPos.x + Math.cos(angle) * wanderRadius,
         y: myPos.y,
         z: myPos.z + Math.sin(angle) * wanderRadius,
-      };
+      });
 
       // Start walking animation and move
       this.stopModelAnimations(['idle']);

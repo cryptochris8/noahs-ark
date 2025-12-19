@@ -250,14 +250,15 @@ export default class PowerUpManager {
   }
 
   /**
-   * Get a random spawn zone, preferring higher tiers
+   * Get a random spawn zone, preferring lower tiers where players spend more time
    */
   private _getRandomSpawnZone(): SpawnZone | null {
     if (SPAWN_ZONES.length === 0) return null;
 
-    // Weight towards higher tiers (safer areas)
+    // Weight towards lower tiers (where players start and spend most time)
+    // Tier 1 = 3x weight, Tier 2 = 2x weight, Tier 3 = 1x weight
     const weightedZones = SPAWN_ZONES.flatMap(zone => {
-      const weight = zone.tier; // Higher tier = more likely
+      const weight = 4 - zone.tier; // Lower tier = more likely
       return Array(weight).fill(zone);
     });
 

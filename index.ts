@@ -17,6 +17,9 @@ import {
 // Available maps: 'plains-of-shinar', 'mount-ararat'
 const MAP_NAME = process.env.MAP_NAME || 'mount-ararat';
 
+// Debug mode - set to true to enable debug commands (/spawnanimal, /testflood, /floodheight, /testrain)
+const DEBUG_MODE = process.env.DEBUG_MODE === 'true';
+
 // Dynamic map loading
 function loadMap(mapName: string) {
   switch (mapName) {
@@ -30,8 +33,6 @@ function loadMap(mapName: string) {
 }
 
 const worldMap = loadMap(MAP_NAME);
-
-console.log(`Loading map: ${MAP_NAME}`);
 
 import GameManager from './src/game/GameManager';
 import GamePlayerEntity from './src/game/entities/GamePlayerEntity';
@@ -111,15 +112,6 @@ startServer(world => {
     world.chatManager.sendBroadcastMessage('Type /restart to begin!', 'FFFF00');
   });
 
-  // Debug: Spawn test animal
-  world.chatManager.registerCommand('/spawnanimal', player => {
-    const animalManager = GameManager.instance.animalManager;
-    if (animalManager) {
-      world.chatManager.sendPlayerMessage(player, 'Spawning test animals...', '00FF00');
-      animalManager.spawnInitialAnimals();
-    }
-  });
-
   // Fun easter egg from original boilerplate
   world.chatManager.registerCommand('/rocket', player => {
     world.entityManager.getPlayerEntitiesByPlayer(player).forEach(entity => {
@@ -127,72 +119,86 @@ startServer(world => {
     });
   });
 
-  // Test command: Spawn flood visual to test the water effect
-  world.chatManager.registerCommand('/testflood', player => {
-    const floodManager = GameManager.instance.floodManager;
-    if (!floodManager) {
-      world.chatManager.sendPlayerMessage(player, 'FloodManager not initialized!', 'FF0000');
-      return;
-    }
+  // Debug commands - only registered when DEBUG_MODE=true
+  if (DEBUG_MODE) {
+    // Debug: Spawn test animal
+    world.chatManager.registerCommand('/spawnanimal', player => {
+      const animalManager = GameManager.instance.animalManager;
+      if (animalManager) {
+        world.chatManager.sendPlayerMessage(player, 'Spawning test animals...', '00FF00');
+        animalManager.spawnInitialAnimals();
+      }
+    });
 
-    const floodVisual = floodManager.floodVisual;
-    if (!floodVisual) {
-      world.chatManager.sendPlayerMessage(player, 'FloodVisual not initialized!', 'FF0000');
-      return;
-    }
+    // Test command: Spawn flood visual to test the water effect
+    world.chatManager.registerCommand('/testflood', player => {
+      const floodManager = GameManager.instance.floodManager;
+      if (!floodManager) {
+        world.chatManager.sendPlayerMessage(player, 'FloodManager not initialized!', 'FF0000');
+        return;
+      }
 
-    if (floodVisual.isSpawned) {
-      // Despawn if already visible
-      floodVisual.despawn();
-      world.chatManager.sendPlayerMessage(player, 'Flood visual DESPAWNED', 'FFAA00');
-    } else {
-      // Spawn and start test rise
-      floodVisual.spawn();
-      floodVisual.startTestRise(25); // Rise to Y=25
-      world.chatManager.sendPlayerMessage(player, 'Flood visual SPAWNED - rising to Y=25', '00FFFF');
-    }
-  });
+      const floodVisual = floodManager.floodVisual;
+      if (!floodVisual) {
+        world.chatManager.sendPlayerMessage(player, 'FloodVisual not initialized!', 'FF0000');
+        return;
+      }
 
-  // Test command: Set flood visual to specific height
-  world.chatManager.registerCommand('/floodheight', player => {
-    const floodManager = GameManager.instance.floodManager;
-    if (!floodManager || !floodManager.floodVisual) {
-      world.chatManager.sendPlayerMessage(player, 'FloodVisual not available!', 'FF0000');
-      return;
-    }
+      if (floodVisual.isSpawned) {
+        // Despawn if already visible
+        floodVisual.despawn();
+        world.chatManager.sendPlayerMessage(player, 'Flood visual DESPAWNED', 'FFAA00');
+      } else {
+        // Spawn and start test rise
+        floodVisual.spawn();
+        floodVisual.startTestRise(25); // Rise to Y=25
+        world.chatManager.sendPlayerMessage(player, 'Flood visual SPAWNED - rising to Y=25', '00FFFF');
+      }
+    });
 
-    const floodVisual = floodManager.floodVisual;
-    if (!floodVisual.isSpawned) {
-      floodVisual.spawn();
-    }
+    // Test command: Set flood visual to specific height
+    world.chatManager.registerCommand('/floodheight', player => {
+      const floodManager = GameManager.instance.floodManager;
+      if (!floodManager || !floodManager.floodVisual) {
+        world.chatManager.sendPlayerMessage(player, 'FloodVisual not available!', 'FF0000');
+        return;
+      }
 
-    // Cycle through heights: 5 -> 15 -> 25 -> 5
-    const currentHeight = floodVisual.height;
-    let newHeight = 5;
-    if (currentHeight < 10) newHeight = 15;
-    else if (currentHeight < 20) newHeight = 25;
+      const floodVisual = floodManager.floodVisual;
+      if (!floodVisual.isSpawned) {
+        floodVisual.spawn();
+      }
 
-    floodVisual.setHeight(newHeight);
-    world.chatManager.sendPlayerMessage(player, `Flood height set to Y=${newHeight}`, '00FFFF');
-  });
+      // Cycle through heights: 5 -> 15 -> 25 -> 5
+      const currentHeight = floodVisual.height;
+      let newHeight = 5;
+      if (currentHeight < 10) newHeight = 15;
+      else if (currentHeight < 20) newHeight = 25;
 
-  // Test rain command
-  world.chatManager.registerCommand('/testrain', player => {
-    const weatherManager = GameManager.instance.weatherManager;
-    if (!weatherManager) {
-      world.chatManager.sendPlayerMessage(player, 'WeatherManager not initialized!', 'FF0000');
-      return;
-    }
+      floodVisual.setHeight(newHeight);
+      world.chatManager.sendPlayerMessage(player, `Flood height set to Y=${newHeight}`, '00FFFF');
+    });
 
-    if (weatherManager.isActive) {
-      weatherManager.stop();
-      world.chatManager.sendPlayerMessage(player, 'Rain STOPPED', 'FFAA00');
-    } else {
-      weatherManager.setFloodProgress(0.5); // Set to 50% for visible rain
-      weatherManager.start();
-      world.chatManager.sendPlayerMessage(player, 'Rain STARTED at 50% intensity', '00FFFF');
-    }
-  });
+    // Test rain command
+    world.chatManager.registerCommand('/testrain', player => {
+      const weatherManager = GameManager.instance.weatherManager;
+      if (!weatherManager) {
+        world.chatManager.sendPlayerMessage(player, 'WeatherManager not initialized!', 'FF0000');
+        return;
+      }
+
+      if (weatherManager.isActive) {
+        weatherManager.stop();
+        world.chatManager.sendPlayerMessage(player, 'Rain STOPPED', 'FFAA00');
+      } else {
+        weatherManager.setFloodProgress(0.5); // Set to 50% for visible rain
+        weatherManager.start();
+        world.chatManager.sendPlayerMessage(player, 'Rain STARTED at 50% intensity', '00FFFF');
+      }
+    });
+
+    console.log('Debug commands enabled: /spawnanimal, /testflood, /floodheight, /testrain');
+  }
 
   // Help command
   world.chatManager.registerCommand('/help', player => {
@@ -204,6 +210,6 @@ startServer(world => {
     world.chatManager.sendPlayerMessage(player, '  Shift - Sprint', 'AAAAAA');
     world.chatManager.sendPlayerMessage(player, '  E - Interact with animals', 'AAAAAA');
     world.chatManager.sendPlayerMessage(player, '  F - Deliver animals at the Ark', 'AAAAAA');
-    world.chatManager.sendPlayerMessage(player, 'Commands: /restart, /help, /testflood, /floodheight, /testrain', 'AAAAAA');
+    world.chatManager.sendPlayerMessage(player, 'Commands: /restart, /easy, /normal, /hard, /help', 'AAAAAA');
   });
 });

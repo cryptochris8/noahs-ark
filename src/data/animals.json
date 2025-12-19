@@ -82,7 +82,7 @@
       "display_name": "Beaver",
       "pairs_required": 1,
       "spawn_tags": ["forest"],
-      "preferred_tiers": [1]
+      "preferred_tiers": [2]
     },
     {
       "id": "ocelot",
@@ -117,7 +117,7 @@
       "display_name": "Lizard",
       "pairs_required": 1,
       "spawn_tags": ["rocky"],
-      "preferred_tiers": [1, 2]
+      "preferred_tiers": [3]
     },
     {
       "id": "penguin",

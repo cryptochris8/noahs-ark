@@ -145,19 +145,6 @@ export default class PowerUpEntity extends Entity {
   }
 
   /**
-   * Update collider position to match entity (only used if not attached to rigid body)
-   */
-  private _updateColliderPosition(): void {
-    if (this._collider && this.isSpawned) {
-      this._collider.setRelativePosition({
-        x: this.position.x,
-        y: this.position.y,
-        z: this.position.z,
-      });
-    }
-  }
-
-  /**
    * Handle power-up collection
    */
   private _collect(player: PlayerEntity): void {
@@ -199,7 +186,7 @@ export default class PowerUpEntity extends Entity {
         y: this._spawnY + this._bobOffset,
         z: this.position.z,
       });
-      this._updateColliderPosition();
+      // Note: Collider is attached to rigid body so it moves automatically with entity
     }, 50);
   }
 

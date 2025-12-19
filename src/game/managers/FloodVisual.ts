@@ -84,7 +84,6 @@ export default class FloodVisual {
     this._waterEntity.setTintColor({ r: 60, g: 140, b: 220 });
 
     this._isSpawned = true;
-    console.log(`[FloodVisual] Spawned water at Y=${this._currentHeight}`);
   }
 
   /**
@@ -96,7 +95,6 @@ export default class FloodVisual {
     this._waterEntity.despawn();
     this._waterEntity = null;
     this._isSpawned = false;
-    console.log('[FloodVisual] Despawned water');
   }
 
   /**
@@ -130,14 +128,12 @@ export default class FloodVisual {
 
   /**
    * Test method: Animate water rising by 1 block per second
+   * Note: Only used by debug commands when DEBUG_MODE is enabled
    */
   public startTestRise(targetHeight: number = 30): void {
-    console.log(`[FloodVisual] Starting test rise to Y=${targetHeight}`);
-
     const riseInterval = setInterval(() => {
       if (this._currentHeight >= targetHeight) {
         clearInterval(riseInterval);
-        console.log('[FloodVisual] Test rise complete');
         return;
       }
 

@@ -110,11 +110,12 @@ export default class AnimalManager {
 
     // Find suitable spawn zones
     const suitableZones = SPAWN_ZONES.filter(zone => {
-      // Check if zone has matching tags
+      // Check if zone has matching tags (or animal has no tag preference)
       const hasMatchingTag = spawnTags.some(tag => zone.tags.includes(tag)) || spawnTags.length === 0;
-      // Check if zone is in preferred tier
+      // Check if zone is in preferred tier (or animal has no tier preference)
       const isPreferredTier = preferredTiers.includes(zone.tier) || preferredTiers.length === 0;
-      return hasMatchingTag || isPreferredTier;
+      // Zone must match BOTH biome AND tier preferences (stricter matching)
+      return hasMatchingTag && isPreferredTier;
     });
 
     if (suitableZones.length === 0) {

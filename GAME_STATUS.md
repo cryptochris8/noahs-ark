@@ -19,14 +19,14 @@ The core gameplay loop is complete and functional:
 
 ## High Priority - Missing Features from GDD
 
-### 1. Power-ups System
-- **Status:** Config exists in `game_config.json` but feature is disabled and not implemented
-- **Design (from GDD Section 5.4):**
-  - Speed Boots - Temporary movement speed boost
-  - Animal Magnet - Animals within range automatically follow
-  - Flood Freeze - Temporarily stops flood from rising
-- **Config location:** `src/data/game_config.json` lines 40-44
-- **Work needed:** Create PowerUp entity, spawning logic, UI display, effect implementation
+### 1. Power-ups System - IMPLEMENTED ✅ (Fixed Dec 18, 2025)
+- **Status:** Fully implemented and enabled
+- **Power-ups available:**
+  - Speed Boots - 1.8x movement speed for 15 seconds
+  - Animal Magnet - Auto-attracts animals within 15 blocks for 12 seconds
+  - Flood Freeze - Stops flood rising for 10 seconds
+- **Spawning:** Every 30 seconds, max 5 active in world
+- **Bug fixed:** Collider positioning was incorrect, causing pickup issues
 
 ### 2. Co-op/Competitive Modes
 - **Status:** Not implemented - only solo mode works
@@ -70,14 +70,17 @@ The core gameplay loop is complete and functional:
 
 ## Low Priority - Debug/Cleanup
 
-### Debug Commands (Consider removing for production)
+### Debug Commands - HANDLED (Dec 18, 2025)
 
-| Command | Location | Purpose |
-|---------|----------|---------|
-| `/spawnanimal` | `index.ts:109` | Debug spawn test animals |
-| `/testflood` | `index.ts:125` | Test flood visual |
-| `/floodheight` | `index.ts:151` | Cycle flood heights |
-| `/rocket` | `index.ts:118` | Easter egg (launch player) |
+Debug commands are now behind a `DEBUG_MODE` flag. Set `DEBUG_MODE=true` environment variable to enable them.
+
+| Command | Purpose | Status |
+|---------|---------|--------|
+| `/spawnanimal` | Debug spawn test animals | Disabled by default |
+| `/testflood` | Test flood visual | Disabled by default |
+| `/floodheight` | Cycle flood heights | Disabled by default |
+| `/testrain` | Test rain effects | Disabled by default |
+| `/rocket` | Easter egg (launch player) | Always enabled |
 
 ### Unused Configuration Options
 
@@ -89,12 +92,12 @@ The core gameplay loop is complete and functional:
 | `player.base_move_speed` | `game_config.json:9` | Player speed (uses SDK default) |
 | `player.sprint_multiplier` | `game_config.json:10` | Sprint speed (uses SDK default) |
 
-### Console.log Cleanup
+### Console.log Cleanup - DONE (Dec 18, 2025)
 
 - **Map generation files:** ~200+ console.log statements (acceptable for build scripts)
-- **Runtime code to clean:**
-  - `src/game/managers/FloodVisual.ts` lines 87, 99, 135, 140
-  - `index.ts` line 34
+- **Runtime code:** ✅ Cleaned
+  - Removed console.log from `src/game/managers/FloodVisual.ts`
+  - Removed console.log from `index.ts`
 
 ### Duplicate Files
 
@@ -103,30 +106,54 @@ The core gameplay loop is complete and functional:
 
 ---
 
-## Potential Bug
+## Fixed Bugs
 
-### Animal Spawn Zone Logic
+### Animal Spawn Zone Logic - FIXED (Dec 18, 2025)
 
 **File:** `src/game/managers/AnimalManager.ts` line 117
 
-```typescript
-// Current (uses OR - too permissive)
-return hasMatchingTag || isPreferredTier;
+Changed from OR (`||`) to AND (`&&`) for stricter biome/tier matching. Animals now spawn only in zones that match BOTH their biome tags AND preferred tiers.
 
-// Should be (uses AND - stricter matching)
-return hasMatchingTag && isPreferredTier;
-```
+### Power-Up Collider Bug - FIXED (Dec 18, 2025)
 
-**Impact:** Animals might spawn in wrong biomes (e.g., grassland animals in rocky tier 3 areas)
+**File:** `src/game/entities/PowerUpEntity.ts`
+
+The `_updateColliderPosition()` method was incorrectly setting the collider's relative position to world coordinates instead of keeping it at (0,0,0) relative to the entity. This caused the pickup collider to be far offset from the visual power-up, making them impossible to collect. Removed the incorrect method call since colliders attached to rigid bodies move automatically.
+
+### Power-Up Spawn Location Bug - FIXED (Dec 18, 2025)
+
+**File:** `src/game/managers/PowerUpManager.ts`
+
+Power-ups were spawning mostly at high elevations (Tier 3 zones near the ark) because the weighting was inverted. Changed from `weight = zone.tier` to `weight = 4 - zone.tier` so power-ups now spawn more frequently in lower tiers where players spend most of their time.
+
+### Animal Spawn Zone Mismatch - FIXED (Dec 18, 2025)
+
+**File:** `src/data/animals.json`
+
+Some animals had biome+tier combinations that didn't exist in the spawn zones, causing them to fall back to random spawns across the entire map:
+- **beaver**: forest + tier [1] → Changed to tier [2] (no tier 1 forest zones exist)
+- **lizard**: rocky + tier [1, 2] → Changed to tier [3] (only tier 3 has rocky zones)
+
+This was causing animals to spawn in unreachable or unexpected locations.
+
+### Animals Escaping Map Boundaries - FIXED (Dec 18, 2025)
+
+**File:** `src/game/entities/AnimalEntity.ts`
+
+Animals had no boundary enforcement and could wander or flee off the map. Added:
+- Map boundary constants (mount-ararat: ±60 X/Z, plains-of-shinar: ±75 X/Z)
+- `_clampToBounds()` helper to constrain positions
+- Boundary clamping on wander targets and flee targets
+- Periodic boundary check in `_onTick()` that teleports escaped animals back to valid positions
 
 ---
 
 ## Implementation Priority Recommendations
 
 ### Quick Wins (< 30 min each)
-1. Fix spawn zone logic bug (OR → AND)
-2. Remove or comment out debug commands for production
-3. Clean up console.log statements in runtime code
+1. ~~Fix spawn zone logic bug (OR → AND)~~ ✅ DONE
+2. ~~Remove or comment out debug commands for production~~ ✅ DONE
+3. ~~Clean up console.log statements in runtime code~~ ✅ DONE
 
 ### Medium Effort (1-2 hours each)
 1. Add unique sound effects (if audio files available)
@@ -134,7 +161,7 @@ return hasMatchingTag && isPreferredTier;
 3. Add Ark horn sound effect
 
 ### Larger Features (4+ hours each)
-1. Implement power-ups system
+1. ~~Implement power-ups system~~ ✅ DONE (was already implemented, fixed collider bug)
 2. Add competitive multiplayer mode
 3. Add co-op multiplayer mode
 
