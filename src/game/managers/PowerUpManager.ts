@@ -103,12 +103,22 @@ export default class PowerUpManager {
    * Start the power-up system
    */
   public start(): void {
-    if (this._isActive) return;
+    if (this._isActive) {
+      console.log('[PowerUpManager] Already active, skipping start');
+      return;
+    }
     this._isActive = true;
+    console.log('[PowerUpManager] Starting power-up system');
+    console.log('[PowerUpManager] Spawn interval:', this._spawnIntervalSeconds, 'seconds');
+    console.log('[PowerUpManager] Max active:', this._maxActivePowerUps);
+    console.log('[PowerUpManager] Power-up types:', Object.keys(this._powerUpTypes));
 
     // Spawn initial power-up after a delay
     setTimeout(() => {
-      if (this._isActive) this._spawnRandomPowerUp();
+      if (this._isActive) {
+        console.log('[PowerUpManager] Spawning initial power-up (after 10s delay)');
+        this._spawnRandomPowerUp();
+      }
     }, 10000); // First spawn after 10 seconds
 
     // Start periodic spawning
@@ -212,20 +222,35 @@ export default class PowerUpManager {
    * Spawn a random power-up at a random location
    */
   private _spawnRandomPowerUp(): void {
+    console.log('[PowerUpManager] Attempting to spawn power-up...');
+
     // Check if we've reached max power-ups
     const currentCount = this.activePowerUps.length;
-    if (currentCount >= this._maxActivePowerUps) return;
+    console.log('[PowerUpManager] Current active power-ups:', currentCount, '/', this._maxActivePowerUps);
+    if (currentCount >= this._maxActivePowerUps) {
+      console.log('[PowerUpManager] Max power-ups reached, skipping spawn');
+      return;
+    }
 
     // Pick a random power-up type
     const typeKeys = Object.keys(this._powerUpTypes) as PowerUpType[];
-    if (typeKeys.length === 0) return;
+    console.log('[PowerUpManager] Available power-up types:', typeKeys);
+    if (typeKeys.length === 0) {
+      console.log('[PowerUpManager] No power-up types configured!');
+      return;
+    }
 
     const randomType = typeKeys[Math.floor(Math.random() * typeKeys.length)];
     const config = this._powerUpTypes[randomType];
+    console.log('[PowerUpManager] Selected type:', randomType);
 
     // Pick a random spawn zone (prefer higher tiers - more accessible)
     const zone = this._getRandomSpawnZone();
-    if (!zone) return;
+    console.log('[PowerUpManager] Selected spawn zone:', zone);
+    if (!zone) {
+      console.log('[PowerUpManager] No spawn zone available!');
+      return;
+    }
 
     // Add random offset - keep Y at zone level (PowerUpEntity will add +1 for bobbing)
     // Use smaller X/Z offset to stay on terrain
@@ -247,22 +272,39 @@ export default class PowerUpManager {
 
     powerUp.spawn(this._world, position);
     this._powerUps.add(powerUp);
+    console.log('[PowerUpManager] ✓ Successfully spawned', randomType, 'at position:', position);
   }
 
   /**
    * Get a random spawn zone, preferring lower tiers where players spend more time
    */
   private _getRandomSpawnZone(): SpawnZone | null {
-    if (SPAWN_ZONES.length === 0) return null;
+    console.log('[PowerUpManager] Total spawn zones:', SPAWN_ZONES.length);
+    if (SPAWN_ZONES.length === 0) {
+      console.log('[PowerUpManager] ERROR: No spawn zones loaded!');
+      return null;
+    }
 
-    // Weight towards lower tiers (where players start and spend most time)
-    // Tier 1 = 3x weight, Tier 2 = 2x weight, Tier 3 = 1x weight
-    const weightedZones = SPAWN_ZONES.flatMap(zone => {
-      const weight = 4 - zone.tier; // Lower tier = more likely
-      return Array(weight).fill(zone);
-    });
+    // Only spawn on Tier 1 zones (lowest, most accessible areas)
+    // This ensures power-ups are always at player level and easy to reach
+    const tier1Zones = SPAWN_ZONES.filter(zone => zone.tier === 1);
+    console.log('[PowerUpManager] Tier 1 zones found:', tier1Zones.length);
 
-    return weightedZones[Math.floor(Math.random() * weightedZones.length)];
+    // Fallback to Tier 2 if no Tier 1 zones exist
+    const availableZones = tier1Zones.length > 0
+      ? tier1Zones
+      : SPAWN_ZONES.filter(zone => zone.tier <= 2);
+
+    console.log('[PowerUpManager] Available zones after filtering:', availableZones.length);
+
+    if (availableZones.length === 0) {
+      console.log('[PowerUpManager] ERROR: No available zones after filtering!');
+      return null;
+    }
+
+    const selectedZone = availableZones[Math.floor(Math.random() * availableZones.length)];
+    console.log('[PowerUpManager] Selected zone tier:', selectedZone.tier, 'position:', selectedZone.position);
+    return selectedZone;
   }
 
   /**

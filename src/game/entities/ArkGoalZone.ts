@@ -68,7 +68,7 @@ export default class ArkGoalZone {
     });
 
     this._pairFailAudio = new Audio({
-      uri: 'audio/sfx/error.mp3',
+      uri: 'audio/sfx/wrong-pair-error.mp3',
       loop: false,
       volume: 0.5,
     });

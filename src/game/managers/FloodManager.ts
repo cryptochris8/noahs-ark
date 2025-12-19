@@ -15,6 +15,7 @@ import {
 
 import GameConfig, { type DifficultyKey, type SwimmingConfig } from '../GameConfig';
 import FloodVisual from './FloodVisual';
+import PowerUpEntity from '../entities/PowerUpEntity';
 
 export type FloodEventCallback = (currentHeight: number, maxHeight: number) => void;
 export type PlayerDrownedCallback = (player: Player) => void;
@@ -470,6 +471,10 @@ export default class FloodManager {
         'You are drowning! Get to higher ground!',
         'FF0000'
       );
+    } else if (entity instanceof PowerUpEntity) {
+      // Power-ups are kinematic - don't apply physics to them
+      // They will be collected or despawned naturally
+      return;
     } else {
       // Non-player entities get pushed up or could be despawned
       entity.applyImpulse({ x: 0, y: 10, z: 0 });

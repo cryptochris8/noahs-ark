@@ -26,13 +26,13 @@ export interface PowerUpConfig {
 
 // Visual models for power-ups (using existing item models from @hytopia.com/assets)
 const POWERUP_MODELS: Record<PowerUpType, string> = {
-  speed_boots: 'models/items/feather.gltf',      // Feather = speed/lightness
-  animal_magnet: 'models/items/compass.gltf',    // Compass = points to things
-  flood_freeze: 'models/items/snowball.gltf',    // Snowball = ice/freeze
+  speed_boots: 'models/items/feather.gltf',       // Feather = speed/lightness
+  animal_magnet: 'models/items/golden-apple.gltf', // Golden apple = attraction/magnet
+  flood_freeze: 'models/items/emerald.gltf',       // Emerald = freeze/ice crystal (blue-green gem)
 };
 
 // Fallback to a generic item model
-const DEFAULT_POWERUP_MODEL = 'models/items/golden-apple.gltf';
+const DEFAULT_POWERUP_MODEL = 'models/items/apple.gltf';
 
 export interface PowerUpEntityOptions {
   powerUpType: PowerUpType;
@@ -60,7 +60,7 @@ export default class PowerUpEntity extends Entity {
     super({
       name: `PowerUp_${options.powerUpType}`,
       modelUri: modelUri,
-      modelScale: 0.8,
+      modelScale: 1.5,  // Increased from 0.8 to make more visible
       rigidBodyOptions: {
         type: RigidBodyType.KINEMATIC_POSITION,
       },
@@ -88,9 +88,11 @@ export default class PowerUpEntity extends Entity {
    * Spawn the power-up in the world
    */
   public spawn(world: World, position: Vector3Like): void {
-    // Spawn slightly above ground
-    const spawnPos = { x: position.x, y: position.y + 1, z: position.z };
+    // Spawn well above ground level to avoid terrain clipping
+    const spawnPos = { x: position.x, y: position.y + 2.5, z: position.z };
     this._spawnY = spawnPos.y;
+
+    console.log(`[PowerUpEntity] Spawning ${this.powerUpType} at (${spawnPos.x.toFixed(1)}, ${spawnPos.y.toFixed(1)}, ${spawnPos.z.toFixed(1)})`);
 
     super.spawn(world, spawnPos);
 
@@ -99,6 +101,8 @@ export default class PowerUpEntity extends Entity {
 
     // Start visual effects (rotation and bobbing)
     this._startVisualEffects();
+
+    console.log(`[PowerUpEntity] ${this.powerUpType} successfully spawned with model scale 1.5 and collider radius 2.0`);
   }
 
   /**
@@ -122,13 +126,13 @@ export default class PowerUpEntity extends Entity {
     // Create collider attached to this entity's rigid body
     this._collider = new Collider({
       shape: ColliderShape.CYLINDER,
-      radius: 2.0,  // Larger radius for easier pickup
-      halfHeight: 2.0,  // Taller to catch players jumping
+      radius: 2.0,  // Large radius for easy pickup
+      halfHeight: 1.5,  // Tall enough to catch players
       isSensor: true,
       relativePosition: { x: 0, y: 0, z: 0 },  // Relative to parent rigid body
       collisionGroups: {
         belongsTo: [CollisionGroup.ENTITY_SENSOR],
-        collidesWith: [CollisionGroup.PLAYER],
+        collidesWith: [CollisionGroup.ENTITY],  // Players belong to ENTITY group, not PLAYER
       },
       onCollision: (other: BlockType | Entity, started: boolean) => {
         if (!started || this._isCollected) return;
@@ -150,6 +154,7 @@ export default class PowerUpEntity extends Entity {
   private _collect(player: PlayerEntity): void {
     if (this._isCollected) return;
 
+    console.log(`[PowerUpEntity] ✓ Player collected ${this.powerUpType} power-up!`);
     this._isCollected = true;
 
     // Trigger callback
@@ -159,6 +164,7 @@ export default class PowerUpEntity extends Entity {
 
     // Despawn after a brief delay for visual feedback
     setTimeout(() => {
+      console.log(`[PowerUpEntity] Despawning collected ${this.powerUpType}`);
       this.despawn();
     }, 100);
   }
@@ -175,12 +181,12 @@ export default class PowerUpEntity extends Entity {
       this.setRotation({ x: 0, y: rotation, z: 0, w: 1 });
     }, 50);
 
-    // Bobbing effect
+    // Bobbing effect (noticeable up/down motion for visibility)
     let bobTime = 0;
     this._bobInterval = setInterval(() => {
       if (!this.isSpawned) return;
       bobTime += 0.1;
-      this._bobOffset = Math.sin(bobTime) * 0.3;
+      this._bobOffset = Math.sin(bobTime) * 0.25;  // Visible bobbing to draw attention
       this.setPosition({
         x: this.position.x,
         y: this._spawnY + this._bobOffset,

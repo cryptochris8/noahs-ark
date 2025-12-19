@@ -95,6 +95,8 @@ export default class GameManager {
   private _gameStartTime: number = 0;
   private _countdownInterval: NodeJS.Timeout | null = null;
   private _uiUpdateInterval: NodeJS.Timeout | null = null;
+  private _restartTimeout: NodeJS.Timeout | null = null;
+  private _restartCountdownInterval: NodeJS.Timeout | null = null;
 
   // Sound effects
   private _victorySound: Audio;
@@ -114,7 +116,7 @@ export default class GameManager {
       volume: 1.0,
     });
     this._defeatSound = new Audio({
-      uri: 'audio/sfx/error.mp3',  // Defeat sound
+      uri: 'audio/sfx/game-over.mp3',
       loop: false,
       volume: 1.0,
     });
@@ -124,7 +126,7 @@ export default class GameManager {
       volume: 0.8,
     });
     this._countdownSound = new Audio({
-      uri: 'audio/sfx/collect.mp3',  // Countdown beep
+      uri: 'audio/sfx/countdown.mp3',
       loop: false,
       volume: 0.5,
     });
@@ -134,12 +136,12 @@ export default class GameManager {
       volume: 0.8,
     });
     this._animalPickupSound = new Audio({
-      uri: 'audio/sfx/collect.mp3',  // Animal starts following
+      uri: 'audio/sfx/animal-pickup.mp3',
       loop: false,
       volume: 0.6,
     });
     this._animalReleaseSound = new Audio({
-      uri: 'audio/sfx/collect.mp3',  // Animal stops following
+      uri: 'audio/sfx/animal-release.mp3',
       loop: false,
       volume: 0.4,
     });
@@ -516,6 +518,9 @@ export default class GameManager {
       playerScores,
       leaderboard,
     });
+
+    // Auto-restart after 25 seconds
+    this._scheduleAutoRestart(25);
   }
 
   /**
@@ -596,6 +601,9 @@ export default class GameManager {
       playerScores,
       leaderboard,
     });
+
+    // Auto-restart after 25 seconds
+    this._scheduleAutoRestart(25);
   }
 
   /**
@@ -615,6 +623,70 @@ export default class GameManager {
 
     // Trigger game over (single life - no respawning)
     this._handleDefeat('drowned');
+  }
+
+  /**
+   * Schedule an automatic restart after the specified number of seconds
+   */
+  private _scheduleAutoRestart(seconds: number): void {
+    // Clear any existing restart timers
+    this._clearRestartTimers();
+
+    let remainingSeconds = seconds;
+
+    // Send initial countdown
+    this._broadcastUIData({
+      type: 'restart-countdown',
+      remainingSeconds,
+    });
+
+    // Countdown interval - update UI every second
+    this._restartCountdownInterval = setInterval(() => {
+      remainingSeconds--;
+
+      if (remainingSeconds > 0) {
+        this._broadcastUIData({
+          type: 'restart-countdown',
+          remainingSeconds,
+        });
+      } else {
+        // Clear the interval when we reach 0
+        if (this._restartCountdownInterval) {
+          clearInterval(this._restartCountdownInterval);
+          this._restartCountdownInterval = null;
+        }
+      }
+    }, 1000);
+
+    // Actual restart timer
+    this._restartTimeout = setTimeout(() => {
+      this._restartTimeout = null;
+
+      // Clear countdown interval
+      if (this._restartCountdownInterval) {
+        clearInterval(this._restartCountdownInterval);
+        this._restartCountdownInterval = null;
+      }
+
+      // Reset and start a new game
+      this.reset();
+      this.startCountdown();
+    }, seconds * 1000);
+  }
+
+  /**
+   * Clear restart timers
+   */
+  private _clearRestartTimers(): void {
+    if (this._restartTimeout) {
+      clearTimeout(this._restartTimeout);
+      this._restartTimeout = null;
+    }
+
+    if (this._restartCountdownInterval) {
+      clearInterval(this._restartCountdownInterval);
+      this._restartCountdownInterval = null;
+    }
   }
 
   /**
@@ -682,6 +754,7 @@ export default class GameManager {
    */
   public reset(): void {
     this._stopGame();
+    this._clearRestartTimers();
 
     if (this._animalManager) {
       this._animalManager.despawnAllAnimals();
