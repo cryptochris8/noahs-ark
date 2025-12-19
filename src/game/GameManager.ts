@@ -48,11 +48,11 @@ const MAP_CONFIGS: Record<string, {
     arkModelRotationY: 135,                     // Rotate 135 degrees to align with land
   },
   'mount-ararat': {
-    arkPosition: { x: 0, y: 34, z: 50 },       // Parallel orientation on mountaintop
-    goalZonePosition: { x: 0, y: 20, z: 14 },  // Drop-off at base of ramp leading to Ark
-    playerSpawn: { x: 0, y: 8, z: -50 },       // Southern Tier 1 area
+    arkPosition: { x: 0, y: 34, z: 0 },        // CENTER of dual-sided mountain
+    goalZonePosition: { x: 0, y: 32, z: 0 },   // Drop-off at center Ark plateau
+    playerSpawn: { x: 0, y: 12, z: -50 },      // Southern Tier 1 area (solo mode) - Y=12 above terrain
     arkModelOffset: { x: 0, y: 3, z: 0 },      // Slight elevation for model
-    arkModelRotationY: 135,                     // Parallel to flood, door facing south
+    arkModelRotationY: 135,                     // Angled orientation
   },
   'original': {
     arkPosition: { x: 0, y: 35, z: 20 },
@@ -107,6 +107,7 @@ export default class GameManager {
   private _animalPickupSound: Audio;
   private _animalReleaseSound: Audio;
   private _powerUpSound: Audio;
+  private _animalSounds: Map<string, Audio> = new Map();
 
   private constructor() {
     // Initialize sound effects
@@ -150,6 +151,22 @@ export default class GameManager {
       loop: false,
       volume: 0.8,
     });
+
+    // Initialize animal-specific sounds
+    // Each animal type can have its own sound file in assets/audio/sfx/animals/
+    const animalTypes = [
+      'sheep', 'cow', 'pig', 'chicken', 'horse', 'donkey', 'rabbit',
+      'fox', 'wolf', 'bear', 'raccoon', 'beaver', 'ocelot', 'capybara',
+      'turtle', 'frog', 'lizard', 'penguin', 'flamingo', 'peacock',
+      'bat', 'crab', 'dog'
+    ];
+    for (const animalType of animalTypes) {
+      this._animalSounds.set(animalType, new Audio({
+        uri: `audio/sfx/animals/${animalType}.mp3`,
+        loop: false,
+        volume: 0.7,
+      }));
+    }
   }
 
   public static get instance(): GameManager {
@@ -927,9 +944,14 @@ export default class GameManager {
     const success = this._animalManager.tryFollowPlayer(animal, player);
 
     if (success) {
-      // Play pickup sound
+      // Play animal-specific sound (falls back to generic pickup if unavailable)
       if (this._world) {
-        this._animalPickupSound.play(this._world, true);
+        const animalSound = this._animalSounds.get(animal.animalType);
+        if (animalSound) {
+          animalSound.play(this._world, true);
+        } else {
+          this._animalPickupSound.play(this._world, true);
+        }
       }
       this._world?.chatManager.sendPlayerMessage(player, `${animal.animalType} is now following you!`, '00FF00');
     } else {
@@ -996,10 +1018,14 @@ export default class GameManager {
 
   /**
    * Get map bounds based on current map
+   * For mount-ararat solo mode, only show south side (Z=-60 to Z=+10)
+   * The north side is reserved for future PVP mode
+   * Map is 120x120 (-60 to +60 on both axes)
    */
   private _getMapBounds(): {minX: number, maxX: number, minZ: number, maxZ: number} {
     const bounds: Record<string, {minX: number, maxX: number, minZ: number, maxZ: number}> = {
-      'mount-ararat': { minX: -65, maxX: 65, minZ: -65, maxZ: 65 },
+      // Solo mode: Only south side visible (Z=-60 to Z=+10, slightly past Ark at Z=0)
+      'mount-ararat': { minX: -65, maxX: 65, minZ: -65, maxZ: 10 },
       'plains-of-shinar': { minX: -80, maxX: 80, minZ: -80, maxZ: 80 }
     };
     return bounds[MAP_NAME] || bounds['mount-ararat'];
@@ -1020,12 +1046,26 @@ export default class GameManager {
     const targetType = following[0].animalType;
 
     // Find all other animals of the same type that are NOT following anyone
-    return this._animalManager.animals
+    const matchingAnimals = this._animalManager.animals
       .filter(a => a.animalType === targetType && !a.isFollowing)
       .map(a => ({
         x: Math.round(a.position.x),
         z: Math.round(a.position.z)
       }));
+
+    // Debug logging
+    if (matchingAnimals.length > 0) {
+      console.log(`[MatchingAnimals] Player following: ${targetType}, found ${matchingAnimals.length} matching:`, matchingAnimals);
+    } else {
+      console.log(`[MatchingAnimals] Player following: ${targetType}, NO matching animals found!`);
+      // Log all animals of this type for debugging
+      const allOfType = this._animalManager.animals.filter(a => a.animalType === targetType);
+      console.log(`[MatchingAnimals] Total ${targetType} in world: ${allOfType.length}, following status:`,
+        allOfType.map(a => ({ pos: { x: Math.round(a.position.x), z: Math.round(a.position.z) }, isFollowing: a.isFollowing }))
+      );
+    }
+
+    return matchingAnimals;
   }
 
   /**

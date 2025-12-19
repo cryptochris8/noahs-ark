@@ -21,14 +21,25 @@ import plainsOfShinarSpawnZones from '../../../assets/plains-of-shinar-spawn-zon
 const MAP_NAME = process.env.MAP_NAME || 'mount-ararat';
 
 // Convert JSON spawn zones to SpawnZone format
+// For mount-ararat solo mode, only use south-side zones (Z <= 0)
+// North-side zones are reserved for future PVP mode
 function loadSpawnZones(mapName: string): SpawnZone[] {
   const rawZones = mapName === 'mount-ararat' ? mountAraratSpawnZones : plainsOfShinarSpawnZones;
 
-  return rawZones.map((zone: any) => ({
-    position: { x: zone.x, y: zone.y, z: zone.z },
-    tier: zone.tier,
-    tags: [zone.biome],
-  }));
+  return rawZones
+    .filter((zone: any) => {
+      // For mount-ararat, only include south-side zones (Z <= 0) for solo mode
+      // This excludes north-t1-*, north-t2-*, north-t3-* zones
+      if (mapName === 'mount-ararat') {
+        return zone.z <= 0;
+      }
+      return true;
+    })
+    .map((zone: any) => ({
+      position: { x: zone.x, y: zone.y, z: zone.z },
+      tier: zone.tier,
+      tags: [zone.biome],
+    }));
 }
 
 const SPAWN_ZONES: SpawnZone[] = loadSpawnZones(MAP_NAME);

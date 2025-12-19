@@ -31,12 +31,22 @@ interface ActiveEffect {
 export type PowerUpCollectedCallback = (player: Player, powerUpType: PowerUpType, config: PowerUpConfig) => void;
 export type PowerUpExpiredCallback = (player: Player, powerUpType: PowerUpType) => void;
 
+// For mount-ararat solo mode, only use south-side zones (Z <= 0)
+// North-side zones are reserved for future PVP mode
 function loadSpawnZones(mapName: string): SpawnZone[] {
   const rawZones = mapName === 'mount-ararat' ? mountAraratSpawnZones : plainsOfShinarSpawnZones;
-  return rawZones.map((zone: any) => ({
-    position: { x: zone.x, y: zone.y, z: zone.z },
-    tier: zone.tier,
-  }));
+  return rawZones
+    .filter((zone: any) => {
+      // For mount-ararat, only include south-side zones (Z <= 0) for solo mode
+      if (mapName === 'mount-ararat') {
+        return zone.z <= 0;
+      }
+      return true;
+    })
+    .map((zone: any) => ({
+      position: { x: zone.x, y: zone.y, z: zone.z },
+      tier: zone.tier,
+    }));
 }
 
 const SPAWN_ZONES: SpawnZone[] = loadSpawnZones(MAP_NAME);

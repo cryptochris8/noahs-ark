@@ -53,9 +53,13 @@ const ANIMAL_MODELS: Record<string, string> = {
 const DEFAULT_ANIMAL_MODEL = 'models/npcs/cow.gltf';
 
 // Map boundaries to keep animals in playable area
+// mount-ararat: 120x120 dual-sided mountain (X: -60 to +60, Z: -60 to +60)
+// Ark at center (Z=0), terrain rises symmetrically from both edges
+// For SOLO MODE: Animals restricted to south side only (Z <= 5)
 const MAP_NAME = process.env.MAP_NAME || 'mount-ararat';
 const MAP_BOUNDS: Record<string, { minX: number; maxX: number; minZ: number; maxZ: number }> = {
-  'mount-ararat': { minX: -60, maxX: 60, minZ: -60, maxZ: 55 },
+  // Solo mode: South side only (Z: -60 to +5, slightly past Ark for delivery)
+  'mount-ararat': { minX: -60, maxX: 60, minZ: -60, maxZ: 5 },
   'plains-of-shinar': { minX: -75, maxX: 75, minZ: -75, maxZ: 70 },
 };
 const CURRENT_BOUNDS = MAP_BOUNDS[MAP_NAME] || MAP_BOUNDS['mount-ararat'];
@@ -209,6 +213,9 @@ export default class AnimalEntity extends Entity {
 
   /**
    * Start fleeing from the flood to higher ground
+   * For dual-sided mountain: Ark is at Z=0 (center)
+   * Animals should flee just enough to escape the flood, staying SPREAD OUT
+   * They shouldn't all cluster at the top - this keeps gameplay interesting
    */
   private _startFleeingFlood(): void {
     if (this._isFleeingFlood || !this.isSpawned || !this.world) return;
@@ -216,15 +223,39 @@ export default class AnimalEntity extends Entity {
     this._isFleeingFlood = true;
     this._clearIdleWander();
 
-    // Find a safe position - move toward higher ground (positive Z and higher Y)
     const myPos = this.position;
 
-    // Calculate flee target - move toward the ark area (higher Z) and uphill
+    // Calculate how far to flee based on current flood level
+    // Only move a small amount toward safety - don't rush to the very top
+    const floodBuffer = 8; // Stay this many blocks above flood
+    const safeY = this._currentFloodHeight + floodBuffer;
+
+    // Only move toward center if we're actually in danger
+    // Move just enough to get to safe height, not all the way to Z=0
+    let targetZ: number;
+    if (myPos.y < safeY) {
+      // In danger - move a moderate distance toward center (3-8 blocks)
+      const fleeDist = 3 + Math.random() * 5;
+      if (myPos.z < 0) {
+        // South side: move toward Z=0 but stop well before it
+        targetZ = Math.min(myPos.z + fleeDist, -5); // Don't go past Z=-5
+      } else {
+        // North side (shouldn't happen in solo): move toward Z=0
+        targetZ = Math.max(myPos.z - fleeDist, 5);
+      }
+    } else {
+      // Already safe - just move laterally to spread out
+      targetZ = myPos.z + (Math.random() - 0.5) * 4;
+    }
+
+    // Spread out on X-axis - move MORE laterally to keep animals distributed
+    const lateralSpread = (Math.random() - 0.5) * 20; // -10 to +10 blocks
+
     // Clamp to map boundaries to prevent animals from escaping
     this._fleeTarget = this._clampToBounds({
-      x: myPos.x + (Math.random() - 0.5) * 8, // Some random lateral movement
-      y: myPos.y + 3,                          // Move up gradually
-      z: myPos.z + 10 + Math.random() * 8,     // Move toward higher ground (ark direction)
+      x: myPos.x + lateralSpread,
+      y: myPos.y + 2,  // Small upward movement
+      z: targetZ,
     });
 
     // Start walking animation
@@ -232,7 +263,6 @@ export default class AnimalEntity extends Entity {
     this.startModelLoopedAnimations(['walk']);
 
     // Use simple movement for fleeing (much cheaper than pathfinding)
-    // This keeps CPU low when many animals flee at once
     this.pathfindingController.move(this._fleeTarget, this._followSpeed * 1.3, {
       moveCompleteCallback: () => {
         this._onFleeComplete();
@@ -248,14 +278,21 @@ export default class AnimalEntity extends Entity {
   private _onFleeComplete(): void {
     this._fleeTarget = null;
 
-    // Check if we're safe now
+    // Check if we're safe now (need buffer above flood)
     const myY = this.position.y;
-    const dangerZone = this._currentFloodHeight + 5;
+    const safeBuffer = 6; // Consider safe if 6+ blocks above flood
+    const dangerZone = this._currentFloodHeight + safeBuffer;
 
     if (myY < dangerZone) {
-      // Still not safe, keep fleeing
+      // Still not safe, keep fleeing (but with delay to prevent clustering)
       this._isFleeingFlood = false;
-      this._startFleeingFlood();
+      // Stagger the next flee attempt to keep animals spread out
+      const delay = 500 + Math.random() * 1500; // 0.5-2 second delay
+      setTimeout(() => {
+        if (!this._isFollowing && this.isSpawned) {
+          this._startFleeingFlood();
+        }
+      }, delay);
     } else {
       // We're safe, return to normal behavior
       this._isFleeingFlood = false;
