@@ -115,6 +115,9 @@
 
 <!-- Mobile Controls -->
 <div class="mobile-controls">
+  <a id="mobile-sprint-button" class="mobile-button mobile-sprint">
+    <span>⚡</span>
+  </a>
   <a id="mobile-interact-button" class="mobile-button">
     <span>E</span>
   </a>
@@ -122,11 +125,16 @@
     <span>F</span>
   </a>
   <a id="mobile-jump-button" class="mobile-button">
-    <img src="{{CDN_ASSETS_URL}}/icons/jump.png" />
+    <span>↑</span>
   </a>
 </div>
 
 <script>
+  // Detect mobile and add class for CSS (Hytopia doesn't add this automatically)
+  if (hytopia.isMobile) {
+    document.body.classList.add('mobile');
+  }
+
   // Game state
   let gameState = {
     state: 'waiting',
@@ -723,46 +731,44 @@
     }
   });
 
-  // Mobile Controls
+  // Mobile Controls - Using SDK input keys: 'sp' = space/jump, 'sh' = shift/sprint
   const mobileInteractButton = document.getElementById('mobile-interact-button');
   const mobileDeliverButton = document.getElementById('mobile-deliver-button');
   const mobileJumpButton = document.getElementById('mobile-jump-button');
+  const mobileSprintButton = document.getElementById('mobile-sprint-button');
+
+  // Helper to add touch handlers with proper cleanup
+  function addMobileButtonHandlers(button, inputKey) {
+    if (!button) return;
+
+    const handleStart = (e) => {
+      e.preventDefault();
+      button.classList.add('active');
+      hytopia.pressInput(inputKey, true);
+    };
+
+    const handleEnd = (e) => {
+      e.preventDefault();
+      button.classList.remove('active');
+      hytopia.pressInput(inputKey, false);
+    };
+
+    button.addEventListener('touchstart', handleStart, { passive: false });
+    button.addEventListener('touchend', handleEnd, { passive: false });
+    button.addEventListener('touchcancel', handleEnd, { passive: false }); // Handle interrupted touches
+  }
 
   // Interact button (E key)
-  mobileInteractButton.addEventListener('touchstart', e => {
-    e.preventDefault();
-    mobileInteractButton.classList.add('active');
-    hytopia.pressInput('e', true);
-  });
-  mobileInteractButton.addEventListener('touchend', e => {
-    e.preventDefault();
-    mobileInteractButton.classList.remove('active');
-    hytopia.pressInput('e', false);
-  });
+  addMobileButtonHandlers(mobileInteractButton, 'e');
 
   // Deliver button (F key)
-  mobileDeliverButton.addEventListener('touchstart', e => {
-    e.preventDefault();
-    mobileDeliverButton.classList.add('active');
-    hytopia.pressInput('f', true);
-  });
-  mobileDeliverButton.addEventListener('touchend', e => {
-    e.preventDefault();
-    mobileDeliverButton.classList.remove('active');
-    hytopia.pressInput('f', false);
-  });
+  addMobileButtonHandlers(mobileDeliverButton, 'f');
 
-  // Jump button (Space)
-  mobileJumpButton.addEventListener('touchstart', e => {
-    e.preventDefault();
-    mobileJumpButton.classList.add('active');
-    hytopia.pressInput(' ', true);
-  });
-  mobileJumpButton.addEventListener('touchend', e => {
-    e.preventDefault();
-    mobileJumpButton.classList.remove('active');
-    hytopia.pressInput(' ', false);
-  });
+  // Jump button (Space - SDK uses 'sp' for space key)
+  addMobileButtonHandlers(mobileJumpButton, 'sp');
+
+  // Sprint button (Shift - SDK uses 'sh' for shift key)
+  addMobileButtonHandlers(mobileSprintButton, 'sh');
 </script>
 
 <style>
@@ -1501,5 +1507,16 @@
     transform: scale(0.92);
     background-color: rgba(0, 0, 0, 0.75);
     box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+  }
+
+  /* Sprint button special styling */
+  .mobile-button.mobile-sprint {
+    background-color: rgba(255, 165, 0, 0.4);
+    border: 2px solid rgba(255, 165, 0, 0.6);
+  }
+
+  .mobile-button.mobile-sprint.active {
+    background-color: rgba(255, 165, 0, 0.7);
+    box-shadow: 0 0 10px rgba(255, 165, 0, 0.5);
   }
 </style>
