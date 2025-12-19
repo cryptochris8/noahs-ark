@@ -131,7 +131,8 @@
 
 <script>
   // Detect mobile and add class for CSS (Hytopia doesn't add this automatically)
-  if (hytopia.isMobile) {
+  // Using the SDK's recommended hytopia.isMobile property
+  if (window.hytopia && hytopia.isMobile) {
     document.body.classList.add('mobile');
   }
 
