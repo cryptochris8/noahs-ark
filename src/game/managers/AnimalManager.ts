@@ -142,6 +142,7 @@ export default class AnimalManager {
 
   /**
    * Spawn an animal at a specific zone with some random offset
+   * Uses ACTUAL terrain height from the world, not the outdated JSON values
    */
   private _spawnAnimalAt(animalType: string, zone: SpawnZone): AnimalEntity {
     const animal = new AnimalEntity({
@@ -150,17 +151,36 @@ export default class AnimalManager {
     });
 
     // Add some random offset to avoid spawning animals on top of each other
-    const offset = {
-      x: (Math.random() - 0.5) * 6,
-      y: 1, // Spawn slightly above ground
-      z: (Math.random() - 0.5) * 6,
-    };
+    const offsetX = (Math.random() - 0.5) * 6;
+    const offsetZ = (Math.random() - 0.5) * 6;
+
+    const targetX = Math.round(zone.position.x + offsetX);
+    const targetZ = Math.round(zone.position.z + offsetZ);
+
+    // Get ACTUAL terrain height at this position by raycasting down
+    // This ensures animals spawn ON TOP of terrain, not inside it
+    let spawnY = zone.position.y + 2; // Default fallback
+
+    // Raycast from high above to find the actual ground level
+    const rayStart = { x: targetX, y: 50, z: targetZ }; // Start high
+    const rayDir = { x: 0, y: -1, z: 0 }; // Cast downward
+    const rayResult = this._world.simulation.raycast(rayStart, rayDir, 60, {
+      filterFlags: 2, // Only hit blocks, not entities
+    });
+
+    if (rayResult && rayResult.hitPoint) {
+      // Spawn 1.5 blocks above the hit point (on top of terrain)
+      spawnY = rayResult.hitPoint.y + 1.5;
+    }
 
     const spawnPos = {
-      x: zone.position.x + offset.x,
-      y: zone.position.y + offset.y,
-      z: zone.position.z + offset.z,
+      x: targetX,
+      y: spawnY,
+      z: targetZ,
     };
+
+    // Debug: Log spawn positions
+    console.log(`[AnimalSpawn] ${animalType} at zone tier=${zone.tier} pos=(${Math.round(spawnPos.x)}, ${Math.round(spawnPos.y)}, ${Math.round(spawnPos.z)})`);
 
     animal.spawn(this._world, spawnPos);
     this._animals.add(animal);

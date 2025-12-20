@@ -55,11 +55,22 @@ const DEFAULT_ANIMAL_MODEL = 'models/npcs/cow.gltf';
 // Map boundaries to keep animals in playable area
 // mount-ararat: 120x120 dual-sided mountain (X: -60 to +60, Z: -60 to +60)
 // Ark at center (Z=0), terrain rises symmetrically from both edges
-// For SOLO MODE: Animals restricted to south side only (Z <= 5)
+//
+// TERRAIN HEIGHT PROFILE (at X=0 center path):
+//   Z=-60: Y=5,  Z=-50: Y=9,  Z=-40: Y=15, Z=-30: Y=22
+//   Z=-26: Y=22, Z=-24: Y=30 (8-block cliff at CENTER only!)
+//   Z=-20 to Z=0: Y=30-32 (Ark plateau at center)
+//
+// IMPORTANT: The cliff at Z=-24 only affects the CENTER PATH (X near 0)
+// Edge positions (|X| > 20) at Z=-20 are Y=21-23 (navigable)
+// Tier 3 spawn zones at X=±25, Z=-20 are valid
+//
+// Pathfinding will naturally prevent center animals from climbing the cliff
 const MAP_NAME = process.env.MAP_NAME || 'mount-ararat';
 const MAP_BOUNDS: Record<string, { minX: number; maxX: number; minZ: number; maxZ: number }> = {
-  // Solo mode: South side only (Z: -60 to +5, slightly past Ark for delivery)
-  'mount-ararat': { minX: -60, maxX: 60, minZ: -60, maxZ: 5 },
+  // Solo mode: South side, allow up to Z=-20 for edge positions
+  // Pathfinding will block center animals from the cliff
+  'mount-ararat': { minX: -60, maxX: 60, minZ: -60, maxZ: -20 },
   'plains-of-shinar': { minX: -75, maxX: 75, minZ: -75, maxZ: 70 },
 };
 const CURRENT_BOUNDS = MAP_BOUNDS[MAP_NAME] || MAP_BOUNDS['mount-ararat'];
@@ -212,10 +223,53 @@ export default class AnimalEntity extends Entity {
   }
 
   /**
+   * Get safe Z position based on flood height
+   * TERRAIN HEIGHT PROFILE (center path X=0):
+   *   Z=-60: Y=5,  Z=-50: Y=9,  Z=-45: Y=12, Z=-40: Y=15
+   *   Z=-35: Y=18, Z=-30: Y=22, Z=-26: Y=22
+   *   Z=-24: Y=30 (cliff at CENTER only - edges are navigable)
+   *   Z=-20: Y=21-23 at edges (X=±25), Y=30 at center
+   *
+   * Animals flee to progressively safer Z positions as flood rises
+   * They stay SPREAD across the terrain, not clustering at one line
+   */
+  private _getSafeZForFloodHeight(floodHeight: number, currentZ: number): number {
+    // Safe zones with minimum Y heights (conservative estimates)
+    // Animals should flee to the NEAREST safe zone, not the farthest
+    const safeZones = [
+      { z: -55, minY: 7 },   // Tier 1 start
+      { z: -50, minY: 9 },
+      { z: -45, minY: 12 },
+      { z: -40, minY: 15 },  // Tier 2 threshold
+      { z: -35, minY: 18 },
+      { z: -30, minY: 22 },  // Tier 3 threshold
+      { z: -25, minY: 22 },  // Safe for edge positions
+      { z: -20, minY: 21 },  // Final safe zone (edge positions only - pathfinding handles center)
+    ];
+
+    const safeBuffer = 6; // Stay this many blocks above flood
+    const requiredY = floodHeight + safeBuffer;
+
+    // Find the nearest safe zone that's high enough
+    // Start from current position and only move forward as needed
+    for (const zone of safeZones) {
+      if (zone.z > currentZ && zone.minY >= requiredY) {
+        return zone.z;
+      }
+    }
+
+    // If flood is very high, go to maximum safe position
+    // Pathfinding will prevent center animals from reaching unreachable areas
+    return -20;
+  }
+
+  /**
    * Start fleeing from the flood to higher ground
-   * For dual-sided mountain: Ark is at Z=0 (center)
-   * Animals should flee just enough to escape the flood, staying SPREAD OUT
-   * They shouldn't all cluster at the top - this keeps gameplay interesting
+   * TIER-AWARE FLEE BEHAVIOR:
+   * - Animals flee incrementally based on flood height
+   * - They stay spread across X-axis (don't cluster at center)
+   * - They NEVER try to climb the impassable cliff at Z=-24
+   * - Uses pathfinding to ensure valid movement
    */
   private _startFleeingFlood(): void {
     if (this._isFleeingFlood || !this.isSpawned || !this.world) return;
@@ -225,51 +279,82 @@ export default class AnimalEntity extends Entity {
 
     const myPos = this.position;
 
-    // Calculate how far to flee based on current flood level
-    // Only move a small amount toward safety - don't rush to the very top
-    const floodBuffer = 8; // Stay this many blocks above flood
+    // Debug logging
+    console.log(`[AnimalFlee] ${this.animalType} at (${Math.round(myPos.x)}, ${Math.round(myPos.y)}, ${Math.round(myPos.z)}) fleeing from flood at Y=${this._currentFloodHeight}`);
+    const floodBuffer = 6;
     const safeY = this._currentFloodHeight + floodBuffer;
 
-    // Only move toward center if we're actually in danger
-    // Move just enough to get to safe height, not all the way to Z=0
-    let targetZ: number;
-    if (myPos.y < safeY) {
-      // In danger - move a moderate distance toward center (3-8 blocks)
-      const fleeDist = 3 + Math.random() * 5;
-      if (myPos.z < 0) {
-        // South side: move toward Z=0 but stop well before it
-        targetZ = Math.min(myPos.z + fleeDist, -5); // Don't go past Z=-5
-      } else {
-        // North side (shouldn't happen in solo): move toward Z=0
-        targetZ = Math.max(myPos.z - fleeDist, 5);
-      }
-    } else {
-      // Already safe - just move laterally to spread out
-      targetZ = myPos.z + (Math.random() - 0.5) * 4;
+    // Check if actually in danger
+    if (myPos.y >= safeY) {
+      // Already safe - just wander a bit laterally to spread out
+      this._isFleeingFlood = false;
+      this._startIdleWander();
+      return;
     }
 
-    // Spread out on X-axis - move MORE laterally to keep animals distributed
-    const lateralSpread = (Math.random() - 0.5) * 20; // -10 to +10 blocks
+    // Calculate target Z based on flood height (incremental, not all at once)
+    const targetZ = this._getSafeZForFloodHeight(this._currentFloodHeight, myPos.z);
 
-    // Clamp to map boundaries to prevent animals from escaping
-    this._fleeTarget = this._clampToBounds({
-      x: myPos.x + lateralSpread,
-      y: myPos.y + 2,  // Small upward movement
-      z: targetZ,
-    });
+    // If already at or past target Z, just spread laterally
+    if (myPos.z >= targetZ - 2) {
+      // Move laterally only, stay at current Z
+      const lateralMove = (Math.random() - 0.5) * 15; // -7.5 to +7.5 blocks
+      this._fleeTarget = this._clampToBounds({
+        x: myPos.x + lateralMove,
+        y: myPos.y,
+        z: myPos.z + (Math.random() * 2), // Small forward movement
+      });
+    } else {
+      // Need to move forward - but only a moderate amount (5-10 blocks)
+      const maxFleeDistance = 5 + Math.random() * 5;
+      const actualTargetZ = Math.min(myPos.z + maxFleeDistance, targetZ);
+
+      // Spread laterally while fleeing to avoid clustering
+      const lateralSpread = (Math.random() - 0.5) * 16; // -8 to +8 blocks
+
+      this._fleeTarget = this._clampToBounds({
+        x: myPos.x + lateralSpread,
+        y: myPos.y,
+        z: actualTargetZ,
+      });
+    }
 
     // Start walking animation
     this.stopModelAnimations(['idle']);
     this.startModelLoopedAnimations(['walk']);
 
-    // Use simple movement for fleeing (much cheaper than pathfinding)
-    this.pathfindingController.move(this._fleeTarget, this._followSpeed * 1.3, {
-      moveCompleteCallback: () => {
+    // Use pathfinding with conservative jump/fall limits
+    // This ensures animals only take navigable paths
+    const pathFound = this.pathfindingController.pathfind(this._fleeTarget, this._followSpeed * 1.2, {
+      maxJump: 2,  // Can climb 2 blocks max
+      maxFall: 3,  // Can fall 3 blocks max
+      pathfindCompleteCallback: () => {
         this._onFleeComplete();
+      },
+      pathfindAbortCallback: () => {
+        // Pathfinding failed - stay in place and retry later
+        this._fleeTarget = null;
+        this._isFleeingFlood = false;
+        this.stopModelAnimations(['walk']);
+        this.startModelLoopedAnimations(['idle']);
+        // Retry after delay
+        setTimeout(() => {
+          if (!this._isFollowing && this.isSpawned) {
+            this._startFleeingFlood();
+          }
+        }, 2000 + Math.random() * 3000);
       },
     });
 
-    this.pathfindingController.face(this._fleeTarget, 5);
+    if (!pathFound) {
+      // Pathfinding rejected immediately - stay in place
+      this._fleeTarget = null;
+      this._isFleeingFlood = false;
+      this.stopModelAnimations(['walk']);
+      this.startModelLoopedAnimations(['idle']);
+    } else {
+      this.pathfindingController.face(this._fleeTarget, 5);
+    }
   }
 
   /**
