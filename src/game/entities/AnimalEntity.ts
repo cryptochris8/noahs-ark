@@ -278,9 +278,6 @@ export default class AnimalEntity extends Entity {
     this._clearIdleWander();
 
     const myPos = this.position;
-
-    // Debug logging
-    console.log(`[AnimalFlee] ${this.animalType} at (${Math.round(myPos.x)}, ${Math.round(myPos.y)}, ${Math.round(myPos.z)}) fleeing from flood at Y=${this._currentFloodHeight}`);
     const floodBuffer = 6;
     const safeY = this._currentFloodHeight + floodBuffer;
 

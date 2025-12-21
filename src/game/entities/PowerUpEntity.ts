@@ -28,7 +28,7 @@ export interface PowerUpConfig {
 const POWERUP_MODELS: Record<PowerUpType, string> = {
   speed_boots: 'models/items/feather.gltf',       // Feather = speed/lightness
   animal_magnet: 'models/items/golden-apple.gltf', // Golden apple = attraction/magnet
-  flood_freeze: 'models/items/emerald.gltf',       // Emerald = freeze/ice crystal (blue-green gem)
+  flood_freeze: 'models/items/snowball.gltf',      // Snowball = freeze/ice
 };
 
 // Fallback to a generic item model
@@ -92,8 +92,6 @@ export default class PowerUpEntity extends Entity {
     const spawnPos = { x: position.x, y: position.y + 2.5, z: position.z };
     this._spawnY = spawnPos.y;
 
-    console.log(`[PowerUpEntity] Spawning ${this.powerUpType} at (${spawnPos.x.toFixed(1)}, ${spawnPos.y.toFixed(1)}, ${spawnPos.z.toFixed(1)})`);
-
     super.spawn(world, spawnPos);
 
     // Create pickup collider
@@ -101,8 +99,6 @@ export default class PowerUpEntity extends Entity {
 
     // Start visual effects (rotation and bobbing)
     this._startVisualEffects();
-
-    console.log(`[PowerUpEntity] ${this.powerUpType} successfully spawned with model scale 1.5 and collider radius 2.0`);
   }
 
   /**
@@ -154,7 +150,6 @@ export default class PowerUpEntity extends Entity {
   private _collect(player: PlayerEntity): void {
     if (this._isCollected) return;
 
-    console.log(`[PowerUpEntity] ✓ Player collected ${this.powerUpType} power-up!`);
     this._isCollected = true;
 
     // Trigger callback
@@ -164,7 +159,6 @@ export default class PowerUpEntity extends Entity {
 
     // Despawn after a brief delay for visual feedback
     setTimeout(() => {
-      console.log(`[PowerUpEntity] Despawning collected ${this.powerUpType}`);
       this.despawn();
     }, 100);
   }

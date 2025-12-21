@@ -179,9 +179,6 @@ export default class AnimalManager {
       z: targetZ,
     };
 
-    // Debug: Log spawn positions
-    console.log(`[AnimalSpawn] ${animalType} at zone tier=${zone.tier} pos=(${Math.round(spawnPos.x)}, ${Math.round(spawnPos.y)}, ${Math.round(spawnPos.z)})`);
-
     animal.spawn(this._world, spawnPos);
     this._animals.add(animal);
 

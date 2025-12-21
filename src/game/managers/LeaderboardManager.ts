@@ -49,7 +49,6 @@ export default class LeaderboardManager {
       }
 
       this._isLoaded = true;
-      console.log(`[LeaderboardManager] Loaded ${this._entries.length} entries`);
     } catch (error) {
       console.error('[LeaderboardManager] Failed to load leaderboard:', error);
       this._entries = [];
@@ -75,7 +74,6 @@ export default class LeaderboardManager {
       }, null, 2);
 
       fs.writeFileSync(this._filePath, data, 'utf-8');
-      console.log(`[LeaderboardManager] Saved ${this._entries.length} entries`);
     } catch (error) {
       console.error('[LeaderboardManager] Failed to save leaderboard:', error);
     }

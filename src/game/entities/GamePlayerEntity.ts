@@ -21,6 +21,10 @@ const INTERACT_REACH = 3.5;
 const BASE_RUN_VELOCITY = 8;
 const BASE_WALK_VELOCITY = 4;
 
+// Animation playback rate to match movement velocity
+// Default player animations are authored for ~4 units/sec, so we scale accordingly
+const BASE_ANIMATION_RATE = 1.5;
+
 export default class GamePlayerEntity extends DefaultPlayerEntity {
   private _lastInteractTime: number = 0;
   private _interactCooldownMs: number = 500;
@@ -36,12 +40,20 @@ export default class GamePlayerEntity extends DefaultPlayerEntity {
     this.controller!.on(BaseEntityControllerEvent.TICK_WITH_PLAYER_INPUT, this._onTickWithPlayerInput.bind(this));
   }
 
+  public override spawn(world: World, position: Vector3Like): void {
+    super.spawn(world, position);
+
+    // Set animation playback rate to match our movement speeds
+    this.setModelAnimationsPlaybackRate(BASE_ANIMATION_RATE * this._speedMultiplier);
+  }
+
   /**
    * Apply a speed multiplier (for Speed Boots power-up)
    */
   public setSpeedMultiplier(multiplier: number): void {
     this._speedMultiplier = multiplier;
     this._updateControllerSpeed();
+    this._updateAnimationSpeed();
   }
 
   /**
@@ -50,6 +62,7 @@ export default class GamePlayerEntity extends DefaultPlayerEntity {
   public resetSpeed(): void {
     this._speedMultiplier = 1.0;
     this._updateControllerSpeed();
+    this._updateAnimationSpeed();
   }
 
   /**
@@ -63,8 +76,11 @@ export default class GamePlayerEntity extends DefaultPlayerEntity {
     controller.walkVelocity = BASE_WALK_VELOCITY * this._speedMultiplier;
   }
 
-  public override spawn(world: World, position: Vector3Like): void {
-    super.spawn(world, position);
+  /**
+   * Update animation playback rate to match movement speed
+   */
+  private _updateAnimationSpeed(): void {
+    this.setModelAnimationsPlaybackRate(BASE_ANIMATION_RATE * this._speedMultiplier);
   }
 
   private _onTickWithPlayerInput(payload: { input: Record<string, boolean> }): void {

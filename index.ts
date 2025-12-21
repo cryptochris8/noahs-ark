@@ -197,7 +197,6 @@ startServer(world => {
       }
     });
 
-    console.log('Debug commands enabled: /spawnanimal, /testflood, /floodheight, /testrain');
   }
 
   // Help command

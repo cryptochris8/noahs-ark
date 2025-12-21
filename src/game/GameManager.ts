@@ -152,21 +152,21 @@ export default class GameManager {
       volume: 0.8,
     });
 
-    // Initialize animal-specific sounds
-    // Each animal type can have its own sound file in assets/audio/sfx/animals/
-    const animalTypes = [
-      'sheep', 'cow', 'pig', 'chicken', 'horse', 'donkey', 'rabbit',
-      'fox', 'wolf', 'bear', 'raccoon', 'beaver', 'ocelot', 'capybara',
-      'turtle', 'frog', 'lizard', 'penguin', 'flamingo', 'peacock',
-      'bat', 'crab', 'dog'
-    ];
-    for (const animalType of animalTypes) {
-      this._animalSounds.set(animalType, new Audio({
-        uri: `audio/sfx/animals/${animalType}.mp3`,
-        loop: false,
-        volume: 0.7,
-      }));
-    }
+    // Animal-specific sounds disabled until all audio files are added
+    // TODO: Re-enable when audio/sfx/animals/*.mp3 files are available
+    // const animalTypes = [
+    //   'sheep', 'cow', 'pig', 'chicken', 'horse', 'donkey', 'rabbit',
+    //   'fox', 'wolf', 'bear', 'raccoon', 'beaver', 'ocelot', 'capybara',
+    //   'turtle', 'frog', 'lizard', 'penguin', 'flamingo', 'peacock',
+    //   'bat', 'crab', 'dog'
+    // ];
+    // for (const animalType of animalTypes) {
+    //   this._animalSounds.set(animalType, new Audio({
+    //     uri: `audio/sfx/animals/${animalType}.mp3`,
+    //     loop: false,
+    //     volume: 0.7,
+    //   }));
+    // }
   }
 
   public static get instance(): GameManager {
@@ -944,14 +944,9 @@ export default class GameManager {
     const success = this._animalManager.tryFollowPlayer(animal, player);
 
     if (success) {
-      // Play animal-specific sound (falls back to generic pickup if unavailable)
+      // Play generic pickup sound (animal-specific sounds disabled until files are added)
       if (this._world) {
-        const animalSound = this._animalSounds.get(animal.animalType);
-        if (animalSound) {
-          animalSound.play(this._world, true);
-        } else {
-          this._animalPickupSound.play(this._world, true);
-        }
+        this._animalPickupSound.play(this._world, true);
       }
       this._world?.chatManager.sendPlayerMessage(player, `${animal.animalType} is now following you!`, '00FF00');
     } else {
@@ -1052,18 +1047,6 @@ export default class GameManager {
         x: Math.round(a.position.x),
         z: Math.round(a.position.z)
       }));
-
-    // Debug logging
-    if (matchingAnimals.length > 0) {
-      console.log(`[MatchingAnimals] Player following: ${targetType}, found ${matchingAnimals.length} matching:`, matchingAnimals);
-    } else {
-      console.log(`[MatchingAnimals] Player following: ${targetType}, NO matching animals found!`);
-      // Log all animals of this type for debugging
-      const allOfType = this._animalManager.animals.filter(a => a.animalType === targetType);
-      console.log(`[MatchingAnimals] Total ${targetType} in world: ${allOfType.length}, following status:`,
-        allOfType.map(a => ({ pos: { x: Math.round(a.position.x), z: Math.round(a.position.z) }, isFollowing: a.isFollowing }))
-      );
-    }
 
     return matchingAnimals;
   }
