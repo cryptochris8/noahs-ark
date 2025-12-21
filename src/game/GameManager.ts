@@ -98,6 +98,12 @@ export default class GameManager {
   private _restartTimeout: NodeJS.Timeout | null = null;
   private _restartCountdownInterval: NodeJS.Timeout | null = null;
 
+  // Performance: UI update caching
+  private _cachedAnimalPositions: Array<{x: number, z: number, type: string, isFollowing: boolean}> = [];
+  private _lastAnimalPositionUpdate: number = 0;
+  private _animalPositionCacheDuration: number = 2000; // Cache for 2 seconds
+  private _matchingAnimalsCache: Map<string, {positions: Array<{x: number, z: number}>, timestamp: number}> = new Map();
+
   // Sound effects
   private _victorySound: Audio;
   private _defeatSound: Audio;
@@ -410,8 +416,8 @@ export default class GameManager {
       this._scoreManager.startGame(600); // 10 minute max game time for time bonus calculation
     }
 
-    // Start UI update loop
-    this._uiUpdateInterval = setInterval(() => this._broadcastUIUpdate(), 500);
+    // Start UI update loop - reduced frequency for performance (1 second instead of 500ms)
+    this._uiUpdateInterval = setInterval(() => this._broadcastUIUpdate(), 1000);
 
     // Broadcast game start
     this._broadcastMessage('Find pairs of animals and bring them to the Ark!', '00FF00');
@@ -999,16 +1005,25 @@ export default class GameManager {
 
   /**
    * Get all animal positions for mini-map UI
+   * PERFORMANCE: Cached for 2 seconds to reduce overhead
    */
   private _getAnimalPositionsForUI(): Array<{x: number, z: number, type: string, isFollowing: boolean}> {
     if (!this._animalManager) return [];
 
-    return this._animalManager.animals.map(animal => ({
-      x: Math.round(animal.position.x),
-      z: Math.round(animal.position.z),
-      type: animal.animalType,
-      isFollowing: animal.isFollowing
-    }));
+    const now = Date.now();
+
+    // Only recalculate every 2 seconds
+    if (now - this._lastAnimalPositionUpdate > this._animalPositionCacheDuration) {
+      this._cachedAnimalPositions = this._animalManager.animals.map(animal => ({
+        x: Math.round(animal.position.x),
+        z: Math.round(animal.position.z),
+        type: animal.animalType,
+        isFollowing: animal.isFollowing
+      }));
+      this._lastAnimalPositionUpdate = now;
+    }
+
+    return this._cachedAnimalPositions;
   }
 
   /**
@@ -1029,6 +1044,7 @@ export default class GameManager {
   /**
    * Get positions of animals matching the player's single following animal
    * Only returns data when player has exactly 1 animal following
+   * PERFORMANCE: Cached for 2 seconds to reduce overhead
    */
   private _getMatchingAnimalPositions(player: Player): Array<{x: number, z: number}> | null {
     if (!this._animalManager) return null;
@@ -1040,6 +1056,18 @@ export default class GameManager {
 
     const targetType = following[0].animalType;
 
+    // Cache key: player ID + animal type
+    const cacheKey = `${player.id}_${targetType}`;
+    const now = Date.now();
+
+    // Use cached result if available (valid for 2 seconds)
+    if (this._matchingAnimalsCache.has(cacheKey)) {
+      const cached = this._matchingAnimalsCache.get(cacheKey)!;
+      if (now - cached.timestamp < 2000) {
+        return cached.positions;
+      }
+    }
+
     // Find all other animals of the same type that are NOT following anyone
     const matchingAnimals = this._animalManager.animals
       .filter(a => a.animalType === targetType && !a.isFollowing)
@@ -1047,6 +1075,12 @@ export default class GameManager {
         x: Math.round(a.position.x),
         z: Math.round(a.position.z)
       }));
+
+    // Cache the result
+    this._matchingAnimalsCache.set(cacheKey, {
+      positions: matchingAnimals,
+      timestamp: now
+    });
 
     return matchingAnimals;
   }

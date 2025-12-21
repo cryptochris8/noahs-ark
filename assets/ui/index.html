@@ -193,6 +193,15 @@
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   }
 
+  // PERFORMANCE: Separate animation loop for minimap (smooth 60fps animations)
+  function animateMinimap() {
+    drawMinimap();
+    requestAnimationFrame(animateMinimap);
+  }
+
+  // Start continuous minimap animation
+  animateMinimap();
+
   // Update UI with game state
   function updateUI() {
     // Update pairs counter
@@ -220,8 +229,8 @@
     // Update stamina bar
     updateStaminaBar();
 
-    // Update mini-map
-    drawMinimap();
+    // PERFORMANCE: Minimap runs on its own animation loop (see animateMinimap above)
+    // No need to call drawMinimap() here
 
     // Update match arrows
     updateMatchArrows();

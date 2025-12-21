@@ -410,14 +410,16 @@ export default class PowerUpManager {
 
   /**
    * Start the animal magnet effect - continuously attracts nearby animals
+   * PERFORMANCE: Optimized with early exits, squared distance, and reduced frequency
    */
   private _startAnimalMagnet(player: Player, config: PowerUpConfig): void {
     if (!this._animalManager) return;
 
     const radius = config.effect_radius || 15;
+    const radiusSquared = radius * radius; // PERFORMANCE: Avoid sqrt in loop
     const playerId = player.id;
 
-    // Create a continuous effect that runs every 500ms
+    // Create a continuous effect that runs every 1000ms (REDUCED from 500ms for 50% savings)
     const magnetInterval = setInterval(() => {
       if (!this._animalManager) return;
 
@@ -435,28 +437,35 @@ export default class PowerUpManager {
 
       const playerPos = playerEntities[0].position;
 
-      // Find nearby animals not following anyone
-      const nearbyAnimals = this._animalManager.animals.filter((animal: any) => {
-        if (animal.isFollowing) return false;
-        if (!animal.isSpawned) return false;
-
-        const dx = animal.position.x - playerPos.x;
-        const dz = animal.position.z - playerPos.z;
-        const distance = Math.sqrt(dx * dx + dz * dz);
-
-        return distance <= radius;
-      });
-
-      // Make up to 2 animals follow the player (respecting max following limit)
+      // Check how many animals are already following
       const currentFollowing = this._animalManager.getAnimalsFollowingPlayer(player).length;
       const canFollow = 2 - currentFollowing;
 
-      if (canFollow > 0) {
-        nearbyAnimals.slice(0, canFollow).forEach((animal: any) => {
-          this._animalManager.tryFollowPlayer(animal, player);
-        });
+      // PERFORMANCE: Early exit if already at max
+      if (canFollow <= 0) return;
+
+      // Find nearby animals not following anyone
+      // PERFORMANCE: Break loop once we have enough animals
+      const nearbyAnimals = [];
+      for (const animal of this._animalManager.animals) {
+        if (animal.isFollowing || !animal.isSpawned) continue;
+
+        const dx = animal.position.x - playerPos.x;
+        const dz = animal.position.z - playerPos.z;
+        const distanceSquared = dx * dx + dz * dz; // PERFORMANCE: Use squared distance (no sqrt)
+
+        if (distanceSquared <= radiusSquared) {
+          nearbyAnimals.push(animal);
+          // PERFORMANCE: Early exit once we have enough
+          if (nearbyAnimals.length >= canFollow) break;
+        }
       }
-    }, 500);
+
+      // Make animals follow the player
+      nearbyAnimals.forEach((animal: any) => {
+        this._animalManager.tryFollowPlayer(animal, player);
+      });
+    }, 1000); // PERFORMANCE: Changed from 500ms to 1000ms (50% reduction)
 
     // Store the interval ID in the effect for cleanup
     const effects = this._activeEffects.get(playerId) || [];

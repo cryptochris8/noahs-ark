@@ -30,7 +30,7 @@
     "surface_threshold": 1.5
   },
   "animals": {
-    "max_animals_world": 100,
+    "max_animals_world": 50,
     "respawn_on_pair_completion": true,
     "follow_distance": 3.0,
     "follow_speed_multiplier": 1.4,
@@ -40,7 +40,7 @@
   "powerups": {
     "enabled": true,
     "spawn_interval_seconds": 30,
-    "max_active_powerups": 5,
+    "max_active_powerups": 3,
     "types": {
       "speed_boots": {
         "display_name": "Speed Boots",

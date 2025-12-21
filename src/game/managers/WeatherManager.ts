@@ -115,17 +115,14 @@ const WEATHER_STAGES: WeatherStage[] = [
 // Can be replaced with custom 'particles/raindrop.png' if placed in assets/particles/
 const RAIN_TEXTURE_URI = 'particles/smoke.png';
 
-// Rain emitter positions - grid across the play area
+// Rain emitter positions - PERFORMANCE: Reduced from 9 to 5 emitters (44% reduction)
 const RAIN_EMITTER_POSITIONS = [
   { x: 0, z: 0 },      // Center
-  { x: -40, z: -40 },  // SW
-  { x: 40, z: -40 },   // SE
-  { x: -40, z: 40 },   // NW
-  { x: 40, z: 40 },    // NE
-  { x: 0, z: -50 },    // South (near player spawn)
-  { x: 0, z: 50 },     // North (near ark)
-  { x: -50, z: 0 },    // West
-  { x: 50, z: 0 },     // East
+  { x: -35, z: -35 },  // SW
+  { x: 35, z: -35 },   // SE
+  { x: -35, z: 35 },   // NW
+  { x: 35, z: 35 },    // NE
+  // Removed 4 cardinal direction emitters for better performance
 ];
 
 export default class WeatherManager {
@@ -154,20 +151,20 @@ export default class WeatherManager {
     this._originalFogFar = world.fogFar;
 
     // Create MULTIPLE rain emitters across the map for dense coverage
-    // Each emitter covers a smaller area but with more density
+    // PERFORMANCE: Reduced emitter count (9→5) and particle budget per emitter (2000→1200)
     for (const pos of RAIN_EMITTER_POSITIONS) {
       const emitter = new ParticleEmitter({
         textureUri: RAIN_TEXTURE_URI,
         position: { x: pos.x, y: 50, z: pos.z },
-        positionVariance: { x: 25, y: 5, z: 25 }, // Smaller area per emitter
+        positionVariance: { x: 35, y: 5, z: 35 }, // Larger area per emitter
         velocity: { x: -1, y: -8, z: 0 },
         velocityVariance: { x: 1.5, y: 2, z: 1.5 },
         gravity: { x: 0, y: -12, z: 0 },
         lifetime: 4,
         lifetimeVariance: 1,
-        rate: 300, // Good rate per emitter (9 emitters = 2700 total)
+        rate: 400, // Increased per-emitter rate (5 emitters × 400 = 2000 total base)
         rateVariance: 50,
-        maxParticles: 2000, // Per emitter
+        maxParticles: 1200, // REDUCED from 2000 (5 emitters × 1200 = 6000 total max)
         sizeStart: 0.25, // Visible drops
         sizeEnd: 0.15,
         sizeStartVariance: 0.08,
@@ -206,8 +203,8 @@ export default class WeatherManager {
       this._rainAudio.play(this._world);
     }
 
-    // Start update loop for smooth transitions
-    this._updateInterval = setInterval(() => this._updateWeatherEffects(), 500);
+    // Start update loop for smooth transitions - PERFORMANCE: Reduced to 1 second
+    this._updateInterval = setInterval(() => this._updateWeatherEffects(), 1000);
 
     // Initial update
     this._updateWeatherEffects();

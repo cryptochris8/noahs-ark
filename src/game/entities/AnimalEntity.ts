@@ -97,6 +97,7 @@ export default class AnimalEntity extends Entity {
   private _currentFloodHeight: number = 0;
   private _isFleeingFlood: boolean = false;
   private _fleeTarget: Vector3Like | null = null;
+  private _boundaryCheckCounter: number = 0; // PERFORMANCE: Throttle boundary checks
 
   constructor(options: AnimalEntityOptions) {
     const modelUri = ANIMAL_MODELS[options.animalType] || DEFAULT_ANIMAL_MODEL;
@@ -121,6 +122,9 @@ export default class AnimalEntity extends Entity {
     this._followSpeed = config.player.base_move_speed * config.animals.follow_speed_multiplier;
     this._catchupSpeed = config.player.base_move_speed * (config.animals.catchup_speed_multiplier ?? 1.8);
     this._catchupDistanceThreshold = config.animals.catchup_distance_threshold ?? 8;
+
+    // PERFORMANCE: Stagger boundary checks across animals to distribute load
+    this._boundaryCheckCounter = Math.floor(Math.random() * 30);
 
     // Set up tick handler for following behavior
     this.on(EntityEvent.TICK, this._onTick.bind(this));
@@ -397,18 +401,25 @@ export default class AnimalEntity extends Entity {
   private _onTick(): void {
     if (!this.isSpawned || !this.world) return;
 
-    // Check if animal is out of bounds and bring it back
-    if (!this._isWithinBounds(this.position)) {
-      const safePos = this._clampToBounds(this.position);
-      this.setPosition(safePos);
-      // Clear any current movement targets
-      this._wanderTarget = null;
-      this._fleeTarget = null;
-      this._isFleeingFlood = false;
-      this.stopModelAnimations(['walk']);
-      this.startModelLoopedAnimations(['idle']);
-      this._startIdleWander();
-      return;
+    // PERFORMANCE: Only check boundaries every 30 ticks (half second) instead of every tick
+    // This reduces boundary checks from 1,380/sec to 46/sec with 23 animals
+    this._boundaryCheckCounter++;
+    if (this._boundaryCheckCounter >= 30) {
+      this._boundaryCheckCounter = 0;
+
+      // Check if animal is out of bounds and bring it back
+      if (!this._isWithinBounds(this.position)) {
+        const safePos = this._clampToBounds(this.position);
+        this.setPosition(safePos);
+        // Clear any current movement targets
+        this._wanderTarget = null;
+        this._fleeTarget = null;
+        this._isFleeingFlood = false;
+        this.stopModelAnimations(['walk']);
+        this.startModelLoopedAnimations(['idle']);
+        this._startIdleWander();
+        return;
+      }
     }
 
     if (this._isFollowing && this._followingPlayer) {
@@ -450,57 +461,52 @@ export default class AnimalEntity extends Entity {
     const playerPos = playerEntity.position;
     const myPos = this.position;
 
-    // Calculate distance to player
+    // Calculate distance to player (PERFORMANCE: Use squared distance to avoid sqrt)
     const dx = playerPos.x - myPos.x;
     const dy = playerPos.y - myPos.y;
     const dz = playerPos.z - myPos.z;
     const distanceSquared = dx * dx + dz * dz;
-    const distance = Math.sqrt(distanceSquared);
 
-    // Decrease pathfinding cooldown
+    // PERFORMANCE: Decrease pathfinding cooldown
     if (this._pathfindCooldown > 0) {
       this._pathfindCooldown--;
     }
 
-    // Only move if we're too far from the player
-    if (distance > this._followDistance) {
-      // Use catch-up speed if animal is falling behind
+    // PERFORMANCE OPTIMIZATION: Teleport animals that fall too far behind
+    // This prevents pathfinding struggles and reduces CPU load dramatically
+    const teleportThreshold = 20 * 20; // 20 blocks squared
+    if (distanceSquared > teleportThreshold) {
+      // Animal is too far - teleport to player's position
+      const teleportPos = {
+        x: playerPos.x + (Math.random() - 0.5) * 4, // Random offset to avoid stacking
+        y: playerPos.y,
+        z: playerPos.z + (Math.random() - 0.5) * 4,
+      };
+      this.setPosition(teleportPos);
+      this._pathfindCooldown = 60; // Reset cooldown after teleport
+      this._lastPathfindTarget = null;
+      return;
+    }
+
+    // PERFORMANCE: Only process movement if far enough from player
+    const followThreshold = this._followDistance * this._followDistance; // Squared distance
+    if (distanceSquared > followThreshold) {
+      const distance = Math.sqrt(distanceSquared); // Only calculate sqrt when needed
+
+      // PERFORMANCE: Use simple direct movement instead of complex pathfinding
+      // Animals following the player don't need obstacle avoidance - they can just move toward player
       const isFarBehind = distance > this._catchupDistanceThreshold;
       const currentSpeed = isFarBehind ? this._catchupSpeed : this._followSpeed;
 
-      // Check if we need to recalculate path
-      const needsNewPath = this._shouldRecalculatePath(playerPos);
+      // SUPER SIMPLE: Just move toward player (no pathfinding overhead)
+      this.pathfindingController.move(playerPos, currentSpeed, {
+        moveIgnoreAxes: { y: true },
+      });
 
-      if (needsNewPath && this._pathfindCooldown <= 0) {
-        // Use pathfinding for terrain navigation
-        const pathFound = this.pathfindingController.pathfind(playerPos, currentSpeed, {
-          maxJump: 2,  // Keep pathfinding search space reasonable for performance
-          maxFall: 3,
-          pathfindCompleteCallback: () => {
-            // Path complete, will check again on next tick
-            this._lastPathfindTarget = null;
-          },
-          pathfindAbortCallback: () => {
-            // Path failed, try simple movement instead
-            this._lastPathfindTarget = null;
-            this._pathfindCooldown = 15; // Wait longer before retry on failure
-          },
-        });
-
-        if (pathFound) {
-          this._lastPathfindTarget = { ...playerPos };
-          this._pathfindCooldown = 12; // Don't recalculate for 12 ticks (~1.2 seconds)
-        } else {
-          // Fallback to simple movement if pathfinding fails (much cheaper)
-          this.pathfindingController.move(playerPos, currentSpeed, {
-            moveIgnoreAxes: { y: true },
-          });
-          this._pathfindCooldown = 15;
-        }
+      // PERFORMANCE: Only face player every 10 ticks instead of every tick
+      if (this._pathfindCooldown % 10 === 0) {
+        this.pathfindingController.face(playerPos, 5);
       }
-
-      // Always face the player
-      this.pathfindingController.face(playerPos, 5);
     }
   }
 

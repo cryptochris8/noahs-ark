@@ -160,8 +160,8 @@ export default class FloodManager {
         this._onFloodWarning();
       }
 
-      // Start the tick loop for rising water
-      this._tickInterval = setInterval(() => this._tick(), 100); // 10 ticks per second
+      // Start the tick loop for rising water - PERFORMANCE: Reduced to 5 ticks/sec (was 10)
+      this._tickInterval = setInterval(() => this._tick(), 200); // 5 ticks per second
     }, this._startDelay * 1000);
   }
 
@@ -242,10 +242,10 @@ export default class FloodManager {
     // Check if flood is frozen (Flood Freeze power-up)
     const isFrozen = this._isFloodFrozenCheck ? this._isFloodFrozenCheck() : false;
 
-    // Calculate rise amount for this tick (100ms = 0.1 seconds)
+    // Calculate rise amount for this tick (200ms = 0.2 seconds) - PERFORMANCE: Updated for new tick rate
     // Don't rise if frozen
     if (!isFrozen) {
-      const riseAmount = this._riseSpeed * 0.1;
+      const riseAmount = this._riseSpeed * 0.2;
       this._currentHeight = Math.min(this._maxHeight, this._currentHeight + riseAmount);
     }
 
@@ -353,8 +353,8 @@ export default class FloodManager {
       });
     }
 
-    // Drain stamina while swimming (scaled for 100ms tick rate)
-    const staminaDrain = this._swimmingConfig.stamina_drain_per_second * 0.1;
+    // Drain stamina while swimming (scaled for 200ms tick rate) - PERFORMANCE: Updated
+    const staminaDrain = this._swimmingConfig.stamina_drain_per_second * 0.2;
     state.currentStamina = Math.max(0, state.currentStamina - staminaDrain);
 
     // Warning messages at stamina thresholds
@@ -426,8 +426,8 @@ export default class FloodManager {
       }
     }
 
-    // Recover stamina while on dry land (scaled for 100ms tick rate)
-    const recovery = GameConfig.instance.player.stamina_recovery_per_second * 0.1;
+    // Recover stamina while on dry land (scaled for 200ms tick rate) - PERFORMANCE: Updated
+    const recovery = GameConfig.instance.player.stamina_recovery_per_second * 0.2;
     state.currentStamina = Math.min(this._maxStamina, state.currentStamina + recovery);
   }
 
