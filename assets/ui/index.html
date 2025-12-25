@@ -378,8 +378,8 @@
       const normX = (worldX - bounds.minX) / rangeX;
       const normZ = (worldZ - bounds.minZ) / rangeZ;
       return {
-        x: padding + normX * drawSize,
-        y: padding + (1 - normZ) * drawSize // Flip Z for top-down view (north is up)
+        x: padding + (1 - normX) * drawSize, // Flip X to match screen orientation
+        y: padding + (1 - normZ) * drawSize  // Flip Z for top-down view (north is up)
       };
     }
 
