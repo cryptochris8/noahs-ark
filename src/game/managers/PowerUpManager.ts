@@ -410,13 +410,12 @@ export default class PowerUpManager {
 
   /**
    * Start the animal magnet effect - continuously attracts nearby animals
-   * PERFORMANCE: Optimized with early exits, squared distance, and reduced frequency
+   * PERFORMANCE: Optimized with early exits, spatial queries, and reduced frequency
    */
   private _startAnimalMagnet(player: Player, config: PowerUpConfig): void {
     if (!this._animalManager) return;
 
     const radius = config.effect_radius || 15;
-    const radiusSquared = radius * radius; // PERFORMANCE: Avoid sqrt in loop
     const playerId = player.id;
 
     // Create a continuous effect that runs every 1000ms (REDUCED from 500ms for 50% savings)
@@ -444,22 +443,9 @@ export default class PowerUpManager {
       // PERFORMANCE: Early exit if already at max
       if (canFollow <= 0) return;
 
-      // Find nearby animals not following anyone
-      // PERFORMANCE: Break loop once we have enough animals
-      const nearbyAnimals = [];
-      for (const animal of this._animalManager.animals) {
-        if (animal.isFollowing || !animal.isSpawned) continue;
-
-        const dx = animal.position.x - playerPos.x;
-        const dz = animal.position.z - playerPos.z;
-        const distanceSquared = dx * dx + dz * dz; // PERFORMANCE: Use squared distance (no sqrt)
-
-        if (distanceSquared <= radiusSquared) {
-          nearbyAnimals.push(animal);
-          // PERFORMANCE: Early exit once we have enough
-          if (nearbyAnimals.length >= canFollow) break;
-        }
-      }
+      // PERFORMANCE: Use optimized spatial query from AnimalManager
+      // This method uses axis-aligned rejection tests before calculating distance
+      const nearbyAnimals = this._animalManager.getNearbyAnimals(playerPos, radius, canFollow);
 
       // Make animals follow the player
       nearbyAnimals.forEach((animal: any) => {

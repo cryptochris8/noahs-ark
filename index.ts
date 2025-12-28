@@ -24,7 +24,8 @@ const DEBUG_MODE = process.env.DEBUG_MODE === 'true';
 function loadMap(mapName: string) {
   switch (mapName) {
     case 'mount-ararat':
-      return require('./assets/mount-ararat.json');
+      // Use the new custom map export from MapBuilder
+      return require('./assets/map.json');
     case 'plains-of-shinar':
       return require('./assets/plains-of-shinar.json');
     default:

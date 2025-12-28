@@ -49,7 +49,7 @@ const MAP_CONFIGS: Record<string, {
   },
   'mount-ararat': {
     arkPosition: { x: 0, y: 34, z: 0 },        // CENTER of dual-sided mountain
-    goalZonePosition: { x: 0, y: 32, z: 0 },   // Drop-off at center Ark plateau
+    goalZonePosition: { x: 2, y: 24, z: -28 }, // Drop-off at stone/brick platform (player position: 2.27, 23.75, -28.46)
     playerSpawn: { x: 0, y: 12, z: -50 },      // Southern Tier 1 area (solo mode) - Y=12 above terrain
     arkModelOffset: { x: 0, y: 3, z: 0 },      // Slight elevation for model
     arkModelRotationY: 135,                     // Angled orientation
@@ -93,6 +93,7 @@ export default class GameManager {
   private _difficulty: DifficultyKey = 'normal';
   private _requiredPairs: number = 0;
   private _gameStartTime: number = 0;
+  private _collectedAnimalTypes: Set<string> = new Set(); // Track which animal types have been collected at least once
   private _countdownInterval: NodeJS.Timeout | null = null;
   private _uiUpdateInterval: NodeJS.Timeout | null = null;
   private _restartTimeout: NodeJS.Timeout | null = null;
@@ -103,6 +104,9 @@ export default class GameManager {
   private _lastAnimalPositionUpdate: number = 0;
   private _animalPositionCacheDuration: number = 2000; // Cache for 2 seconds
   private _matchingAnimalsCache: Map<string, {positions: Array<{x: number, z: number}>, timestamp: number}> = new Map();
+
+  // PERFORMANCE: Cache for game state to avoid sending duplicate UI updates
+  private _lastUIState: Map<string, string> = new Map(); // playerId -> serialized state
 
   // Sound effects
   private _victorySound: Audio;
@@ -433,6 +437,10 @@ export default class GameManager {
     // Record the pair
     this._animalManager.recordPairCollected(animalType);
 
+    // Track this animal type as collected (for UI - uncollected animals list)
+    const wasFirstCollection = !this._collectedAnimalTypes.has(animalType);
+    this._collectedAnimalTypes.add(animalType);
+
     // Get the display name
     const animalConfig = GameConfig.instance.getAnimalTypeById(animalType);
     const displayName = animalConfig?.display_name ?? animalType;
@@ -459,8 +467,9 @@ export default class GameManager {
     this._broadcastMessage(`${displayName} pair saved!`, 'FFD700');
     this._broadcastUIUpdate();
 
-    // Check for victory
-    if (this.pairsCollected >= this._requiredPairs) {
+    // Check for victory - all unique animal types must be collected at least once
+    const totalAnimalTypes = GameConfig.instance.animalTypes.length;
+    if (this._collectedAnimalTypes.size >= totalAnimalTypes) {
       this._handleVictory();
     }
   }
@@ -800,6 +809,9 @@ export default class GameManager {
       this._scoreManager.reset();
     }
 
+    // Reset collected animal types tracking
+    this._collectedAnimalTypes.clear();
+
     this._gameStartTime = 0;
     this._state = GameState.WAITING;
 
@@ -860,6 +872,9 @@ export default class GameManager {
     if (this._weatherManager) {
       this._weatherManager.reset();
     }
+
+    // Reset collected animal types tracking
+    this._collectedAnimalTypes.clear();
 
     this._gameStartTime = 0;
     this._state = GameState.WAITING;
@@ -924,6 +939,10 @@ export default class GameManager {
     if (this._scoreManager) {
       this._scoreManager.removePlayer(player.id);
     }
+
+    // PERFORMANCE: Clean up UI state cache
+    this._lastUIState.delete(player.id);
+    this._matchingAnimalsCache.delete(player.id);
   }
 
   /**
@@ -1087,6 +1106,7 @@ export default class GameManager {
 
   /**
    * Send UI update to a specific player
+   * PERFORMANCE: Only sends updates when state actually changes
    */
   private _sendUIUpdate(player: Player): void {
     // Get swimming state for this player
@@ -1105,16 +1125,28 @@ export default class GameManager {
     // Get score data
     const playerScore = this._scoreManager?.getPlayerScore(player.id) ?? 0;
 
-    player.ui.sendData({
+    // Get uncollected animal types (animals still needed)
+    // Convert to plain strings to avoid serialization issues
+    const uncollectedAnimals: string[] = [];
+    for (const animalType of GameConfig.instance.animalTypes) {
+      if (!this._collectedAnimalTypes.has(animalType.id)) {
+        uncollectedAnimals.push(String(animalType.display_name));
+      }
+    }
+
+    // Build the UI state
+    const uiData = {
       type: 'game-state',
       state: this._state,
       pairsCollected: this.pairsCollected,
       requiredPairs: this._requiredPairs,
-      floodProgress: this._floodManager?.progress ?? 0,
-      floodHeight: this._floodManager?.currentHeight ?? 0,
+      collectedCount: this._collectedAnimalTypes.size, // How many unique types collected
+      uncollectedCount: uncollectedAnimals.length, // Just the count, not the full list
+      floodProgress: Math.round((this._floodManager?.progress ?? 0) * 100) / 100, // Round to 2 decimals
+      floodHeight: Math.round((this._floodManager?.currentHeight ?? 0) * 10) / 10, // Round to 1 decimal
       elapsedTime: this.elapsedTimeSeconds,
       isSwimming: isSwimming,
-      swimmingStamina: swimmingStamina,
+      swimmingStamina: Math.round(swimmingStamina),
       followingAnimals: followingAnimals,
       // Mini-map and arrow data
       playerPosition: playerPos,
@@ -1126,7 +1158,35 @@ export default class GameManager {
       activePowerUps: this._powerUpManager?.getActiveEffectsForUI(player.id) ?? [],
       // Score data
       score: playerScore,
+      // ONLY send full uncollected list occasionally, not every update
+      ...(this._collectedAnimalTypes.size === 0 || uncollectedAnimals.length < 5 ? { uncollectedAnimals } : {}),
+    };
+
+    // PERFORMANCE: Create a hash of the state to detect changes
+    // Only send update if state actually changed
+    const stateHash = JSON.stringify({
+      state: uiData.state,
+      pairs: uiData.pairsCollected,
+      collected: uiData.collectedCount, // Track unique types collected
+      flood: uiData.floodProgress,
+      time: uiData.elapsedTime,
+      swimming: uiData.isSwimming,
+      stamina: uiData.swimmingStamina,
+      following: uiData.followingAnimals.join(','),
+      pos: `${uiData.playerPosition.x},${uiData.playerPosition.z}`,
+      score: uiData.score,
+      powerUps: uiData.activePowerUps.length,
     });
+
+    const lastHash = this._lastUIState.get(player.id);
+    if (lastHash === stateHash) {
+      // State hasn't changed, skip sending update
+      return;
+    }
+
+    // State changed, send update and cache the new hash
+    this._lastUIState.set(player.id, stateHash);
+    player.ui.sendData(uiData);
   }
 
   /**

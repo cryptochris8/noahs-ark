@@ -21,10 +21,6 @@ const INTERACT_REACH = 3.5;
 const BASE_RUN_VELOCITY = 8;
 const BASE_WALK_VELOCITY = 4;
 
-// Animation playback rate to match movement velocity
-// Default player animations are authored for ~4 units/sec, so we scale accordingly
-const BASE_ANIMATION_RATE = 1.5;
-
 export default class GamePlayerEntity extends DefaultPlayerEntity {
   private _lastInteractTime: number = 0;
   private _interactCooldownMs: number = 500;
@@ -43,8 +39,8 @@ export default class GamePlayerEntity extends DefaultPlayerEntity {
   public override spawn(world: World, position: Vector3Like): void {
     super.spawn(world, position);
 
-    // Set animation playback rate to match our movement speeds
-    this.setModelAnimationsPlaybackRate(BASE_ANIMATION_RATE * this._speedMultiplier);
+    // Use default animation playback rate (1.0x) for Hytopia's default player model
+    // The SDK handles animation synchronization automatically
   }
 
   /**
@@ -78,9 +74,12 @@ export default class GamePlayerEntity extends DefaultPlayerEntity {
 
   /**
    * Update animation playback rate to match movement speed
+   * For Speed Boots power-up, we scale the animation to match the faster movement
    */
   private _updateAnimationSpeed(): void {
-    this.setModelAnimationsPlaybackRate(BASE_ANIMATION_RATE * this._speedMultiplier);
+    // Only adjust animation rate when speed multiplier is active
+    // Default (1.0x) uses Hytopia's default animation synchronization
+    this.setModelAnimationsPlaybackRate(this._speedMultiplier);
   }
 
   private _onTickWithPlayerInput(payload: { input: Record<string, boolean> }): void {

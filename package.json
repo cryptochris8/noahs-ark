@@ -14,7 +14,7 @@
     "hytopia": "^0.14.30"
   },
   "optionalDependencies": {
-    "@hytopia.com/assets": "^0.4.6"
+    "@hytopia.com/assets": "^0.4.7"
   },
   "devDependencies": {
     "pngjs": "^7.0.0"

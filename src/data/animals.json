@@ -134,13 +134,6 @@
       "preferred_tiers": [1, 2]
     },
     {
-      "id": "peacock",
-      "display_name": "Peacock",
-      "pairs_required": 1,
-      "spawn_tags": ["grassland", "forest"],
-      "preferred_tiers": [2, 3]
-    },
-    {
       "id": "bat",
       "display_name": "Bat",
       "pairs_required": 1,

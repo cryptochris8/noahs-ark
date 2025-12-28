@@ -41,14 +41,75 @@ export interface PowerUpEntityOptions {
 
 export type PowerUpCollectedCallback = (powerUp: PowerUpEntity, player: PlayerEntity) => void;
 
+/**
+ * PERFORMANCE OPTIMIZATION: Shared visual effects system
+ * Instead of each power-up having 2 intervals (rotation + bobbing),
+ * use a single shared interval for all power-ups
+ * Reduces from (N * 2 * 10/sec) to (1 * 10/sec) callbacks
+ */
+class PowerUpVisualEffects {
+  private static _instance: PowerUpVisualEffects | null = null;
+  private _interval: NodeJS.Timeout | null = null;
+  private _powerUps: Set<PowerUpEntity> = new Set();
+  private _rotation: number = 0;
+  private _bobTime: number = 0;
+
+  public static get instance(): PowerUpVisualEffects {
+    if (!this._instance) {
+      this._instance = new PowerUpVisualEffects();
+    }
+    return this._instance;
+  }
+
+  public register(powerUp: PowerUpEntity): void {
+    this._powerUps.add(powerUp);
+
+    // Start the shared interval if this is the first power-up
+    if (this._powerUps.size === 1 && !this._interval) {
+      this._start();
+    }
+  }
+
+  public unregister(powerUp: PowerUpEntity): void {
+    this._powerUps.delete(powerUp);
+
+    // Stop the interval if no power-ups remain
+    if (this._powerUps.size === 0 && this._interval) {
+      this._stop();
+    }
+  }
+
+  private _start(): void {
+    this._rotation = 0;
+    this._bobTime = 0;
+
+    this._interval = setInterval(() => {
+      this._rotation += 0.1;
+      this._bobTime += 0.2;
+      const bobOffset = Math.sin(this._bobTime) * 0.25;
+
+      // Update all registered power-ups in one batch
+      for (const powerUp of this._powerUps) {
+        if (powerUp.isSpawned && !powerUp.isCollected) {
+          powerUp.updateVisuals(this._rotation, bobOffset);
+        }
+      }
+    }, 100); // 10 times per second (same as before, but shared)
+  }
+
+  private _stop(): void {
+    if (this._interval) {
+      clearInterval(this._interval);
+      this._interval = null;
+    }
+  }
+}
+
 export default class PowerUpEntity extends Entity {
   public readonly powerUpType: PowerUpType;
   public readonly config: PowerUpConfig;
 
   private _isCollected: boolean = false;
-  private _rotationInterval: NodeJS.Timeout | null = null;
-  private _bobOffset: number = 0;
-  private _bobInterval: NodeJS.Timeout | null = null;
   private _spawnY: number = 0;
   private _onCollected: PowerUpCollectedCallback | null = null;
   private _collider: Collider | null = null;
@@ -97,15 +158,16 @@ export default class PowerUpEntity extends Entity {
     // Create pickup collider
     this._createPickupCollider(world);
 
-    // Start visual effects (rotation and bobbing)
-    this._startVisualEffects();
+    // Register with shared visual effects system
+    PowerUpVisualEffects.instance.register(this);
   }
 
   /**
    * Despawn the power-up
    */
   public despawn(): void {
-    this._stopVisualEffects();
+    // Unregister from shared visual effects system
+    PowerUpVisualEffects.instance.unregister(this);
 
     if (this._collider) {
       this._collider.removeFromSimulation();
@@ -113,6 +175,24 @@ export default class PowerUpEntity extends Entity {
     }
 
     super.despawn();
+  }
+
+  /**
+   * Update visuals (called by shared system)
+   * PERFORMANCE: This method is called by the shared PowerUpVisualEffects system
+   */
+  public updateVisuals(rotation: number, bobOffset: number): void {
+    if (!this.isSpawned || this._isCollected) return;
+
+    // Update rotation
+    this.setRotation({ x: 0, y: rotation, z: 0, w: 1 });
+
+    // Update bobbing position
+    this.setPosition({
+      x: this.position.x,
+      y: this._spawnY + bobOffset,
+      z: this.position.z,
+    });
   }
 
   /**
@@ -161,47 +241,5 @@ export default class PowerUpEntity extends Entity {
     setTimeout(() => {
       this.despawn();
     }, 100);
-  }
-
-  /**
-   * Start visual effects (rotation and bobbing)
-   * PERFORMANCE: Reduced frequency from 50ms to 100ms (90% CPU reduction)
-   */
-  private _startVisualEffects(): void {
-    // Rotation effect - REDUCED from 20/sec to 10/sec
-    let rotation = 0;
-    this._rotationInterval = setInterval(() => {
-      if (!this.isSpawned) return;
-      rotation += 0.1;  // Doubled increment since running at half speed
-      this.setRotation({ x: 0, y: rotation, z: 0, w: 1 });
-    }, 100);  // PERFORMANCE: Was 50ms, now 100ms (50% reduction)
-
-    // Bobbing effect (noticeable up/down motion for visibility)
-    let bobTime = 0;
-    this._bobInterval = setInterval(() => {
-      if (!this.isSpawned) return;
-      bobTime += 0.2;  // Doubled increment since running at half speed
-      this._bobOffset = Math.sin(bobTime) * 0.25;  // Visible bobbing to draw attention
-      this.setPosition({
-        x: this.position.x,
-        y: this._spawnY + this._bobOffset,
-        z: this.position.z,
-      });
-      // Note: Collider is attached to rigid body so it moves automatically with entity
-    }, 100);  // PERFORMANCE: Was 50ms, now 100ms (50% reduction)
-  }
-
-  /**
-   * Stop visual effects
-   */
-  private _stopVisualEffects(): void {
-    if (this._rotationInterval) {
-      clearInterval(this._rotationInterval);
-      this._rotationInterval = null;
-    }
-    if (this._bobInterval) {
-      clearInterval(this._bobInterval);
-      this._bobInterval = null;
-    }
   }
 }

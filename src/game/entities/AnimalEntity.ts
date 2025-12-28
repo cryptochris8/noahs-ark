@@ -18,39 +18,40 @@ import GameConfig from '../GameConfig';
 // All available animal models from @hytopia.com/assets
 const ANIMAL_MODELS: Record<string, string> = {
   // Farm animals
-  sheep: 'models/npcs/sheep.gltf',
-  cow: 'models/npcs/cow.gltf',
-  pig: 'models/npcs/pig.gltf',
-  chicken: 'models/npcs/chicken.gltf',
-  horse: 'models/npcs/horse.gltf',
-  donkey: 'models/npcs/donkey.gltf',
+  sheep: 'models/npcs/animals/sheep.gltf',
+  cow: 'models/npcs/animals/cow.gltf',
+  pig: 'models/npcs/animals/pig.gltf',
+  chicken: 'models/npcs/animals/chicken.gltf',
+  horse: 'models/npcs/animals/horse.gltf',
+  donkey: 'models/npcs/animals/donkey.gltf',
 
   // Small animals
-  rabbit: 'models/npcs/rabbit.gltf',
-  raccoon: 'models/npcs/raccoon.gltf',
-  beaver: 'models/npcs/beaver.gltf',
-  frog: 'models/npcs/frog.gltf',
-  turtle: 'models/npcs/turtle.gltf',
-  lizard: 'models/npcs/lizard.gltf',
-  crab: 'models/npcs/crab.gltf',
+  rabbit: 'models/npcs/animals/rabbit.gltf',
+  raccoon: 'models/npcs/animals/raccoon.gltf',
+  beaver: 'models/npcs/animals/beaver.gltf',
+  frog: 'models/npcs/animals/frog.gltf',
+  turtle: 'models/npcs/animals/turtle.gltf',
+  lizard: 'models/npcs/animals/lizard.gltf',
+  crab: 'models/npcs/animals/crab.gltf',
 
   // Forest predators
-  fox: 'models/npcs/fox.gltf',
-  wolf: 'models/npcs/wolf.gltf',
-  bear: 'models/npcs/bear.gltf',
-  ocelot: 'models/npcs/ocelot.gltf',
+  fox: 'models/npcs/animals/fox.gltf',
+  wolf: 'models/npcs/animals/wolf.gltf',
+  bear: 'models/npcs/animals/bear.gltf',
+  ocelot: 'models/npcs/animals/ocelot.gltf',
 
   // Exotic animals
-  capybara: 'models/npcs/capybara.gltf',
-  penguin: 'models/npcs/penguin.gltf',
-  flamingo: 'models/npcs/flamingo.gltf',
-  peacock: 'models/npcs/peacock.gltf',
-  bat: 'models/npcs/bat.gltf',
-  dog: 'models/npcs/dog-german-shepherd.gltf',
+  capybara: 'models/npcs/animals/capybara.gltf',
+  penguin: 'models/npcs/animals/penguin.gltf',
+  flamingo: 'models/npcs/animals/flamingo.gltf',
+  bat: 'models/npcs/animals/bat.gltf',
+  dog: 'models/npcs/animals/dog-german-shepherd.gltf',
+  squid: 'models/npcs/animals/squid.gltf',
+  bee: 'models/npcs/animals/bee-adult.gltf',
 };
 
 // Fallback model if specific animal model not found
-const DEFAULT_ANIMAL_MODEL = 'models/npcs/cow.gltf';
+const DEFAULT_ANIMAL_MODEL = 'models/npcs/animals/cow.gltf';
 
 // Map boundaries to keep animals in playable area
 // mount-ararat: 120x120 dual-sided mountain (X: -60 to +60, Z: -60 to +60)
@@ -98,6 +99,9 @@ export default class AnimalEntity extends Entity {
   private _isFleeingFlood: boolean = false;
   private _fleeTarget: Vector3Like | null = null;
   private _boundaryCheckCounter: number = 0; // PERFORMANCE: Throttle boundary checks
+  private _followUpdateCounter: number = 0; // PERFORMANCE: Throttle follow updates
+  private _lastPlayerPos: Vector3Like | null = null;
+  private _isActive: boolean = false; // PERFORMANCE: Track if animal is activated (tick handler registered)
 
   constructor(options: AnimalEntityOptions) {
     const modelUri = ANIMAL_MODELS[options.animalType] || DEFAULT_ANIMAL_MODEL;
@@ -126,8 +130,9 @@ export default class AnimalEntity extends Entity {
     // PERFORMANCE: Stagger boundary checks across animals to distribute load
     this._boundaryCheckCounter = Math.floor(Math.random() * 30);
 
-    // Set up tick handler for following behavior
-    this.on(EntityEvent.TICK, this._onTick.bind(this));
+    // PERFORMANCE OPTIMIZATION: Don't register tick handler until animal is activated
+    // Animals spawn as "static" and only become active when player interacts
+    // this.on(EntityEvent.TICK, this._onTick.bind(this));
   }
 
   public get isFollowing(): boolean {
@@ -162,12 +167,26 @@ export default class AnimalEntity extends Entity {
   }
 
   /**
+   * Activate the animal - registers tick handler for behavior updates
+   * PERFORMANCE: Animals start inactive and only activate when player interacts
+   */
+  private _activate(): void {
+    if (this._isActive) return;
+
+    this._isActive = true;
+    this.on(EntityEvent.TICK, this._onTick.bind(this));
+  }
+
+  /**
    * Start following a player
    */
   public startFollowing(player: Player): boolean {
     if (this._isFollowing) {
       return false; // Already following someone
     }
+
+    // PERFORMANCE: Activate the animal when player interacts
+    this._activate();
 
     this._followingPlayer = player;
     this._isFollowing = true;
@@ -268,12 +287,9 @@ export default class AnimalEntity extends Entity {
   }
 
   /**
-   * Start fleeing from the flood to higher ground
-   * TIER-AWARE FLEE BEHAVIOR:
-   * - Animals flee incrementally based on flood height
-   * - They stay spread across X-axis (don't cluster at center)
-   * - They NEVER try to climb the impassable cliff at Z=-24
-   * - Uses pathfinding to ensure valid movement
+   * Start fleeing from the flood
+   * PERFORMANCE: Simple upward float instead of expensive pathfinding
+   * Animals "swim" upward when water touches them - no pathfinding needed!
    */
   private _startFleeingFlood(): void {
     if (this._isFleeingFlood || !this.isSpawned || !this.world) return;
@@ -287,75 +303,46 @@ export default class AnimalEntity extends Entity {
 
     // Check if actually in danger
     if (myPos.y >= safeY) {
-      // Already safe - just wander a bit laterally to spread out
-      this._isFleeingFlood = false;
-      this._startIdleWander();
-      return;
-    }
-
-    // Calculate target Z based on flood height (incremental, not all at once)
-    const targetZ = this._getSafeZForFloodHeight(this._currentFloodHeight, myPos.z);
-
-    // If already at or past target Z, just spread laterally
-    if (myPos.z >= targetZ - 2) {
-      // Move laterally only, stay at current Z
-      const lateralMove = (Math.random() - 0.5) * 15; // -7.5 to +7.5 blocks
-      this._fleeTarget = this._clampToBounds({
-        x: myPos.x + lateralMove,
-        y: myPos.y,
-        z: myPos.z + (Math.random() * 2), // Small forward movement
-      });
-    } else {
-      // Need to move forward - but only a moderate amount (5-10 blocks)
-      const maxFleeDistance = 5 + Math.random() * 5;
-      const actualTargetZ = Math.min(myPos.z + maxFleeDistance, targetZ);
-
-      // Spread laterally while fleeing to avoid clustering
-      const lateralSpread = (Math.random() - 0.5) * 16; // -8 to +8 blocks
-
-      this._fleeTarget = this._clampToBounds({
-        x: myPos.x + lateralSpread,
-        y: myPos.y,
-        z: actualTargetZ,
-      });
-    }
-
-    // Start walking animation
-    this.stopModelAnimations(['idle']);
-    this.startModelLoopedAnimations(['walk']);
-
-    // Use pathfinding with conservative jump/fall limits
-    // This ensures animals only take navigable paths
-    const pathFound = this.pathfindingController.pathfind(this._fleeTarget, this._followSpeed * 1.2, {
-      maxJump: 2,  // Can climb 2 blocks max
-      maxFall: 3,  // Can fall 3 blocks max
-      pathfindCompleteCallback: () => {
-        this._onFleeComplete();
-      },
-      pathfindAbortCallback: () => {
-        // Pathfinding failed - stay in place and retry later
-        this._fleeTarget = null;
-        this._isFleeingFlood = false;
-        this.stopModelAnimations(['walk']);
-        this.startModelLoopedAnimations(['idle']);
-        // Retry after delay
-        setTimeout(() => {
-          if (!this._isFollowing && this.isSpawned) {
-            this._startFleeingFlood();
-          }
-        }, 2000 + Math.random() * 3000);
-      },
-    });
-
-    if (!pathFound) {
-      // Pathfinding rejected immediately - stay in place
-      this._fleeTarget = null;
+      // Already safe - stop fleeing
       this._isFleeingFlood = false;
       this.stopModelAnimations(['walk']);
       this.startModelLoopedAnimations(['idle']);
-    } else {
-      this.pathfindingController.face(this._fleeTarget, 5);
+      return;
     }
+
+    // PERFORMANCE: Simple float/swim upward instead of pathfinding
+    // Move animal up by 5 blocks to escape water
+    const newY = Math.min(myPos.y + 5, safeY);
+
+    // Add slight lateral randomization to prevent stacking
+    const lateralOffset = {
+      x: (Math.random() - 0.5) * 2, // ±1 block
+      z: (Math.random() - 0.5) * 2, // ±1 block
+    };
+
+    const newPos = this._clampToBounds({
+      x: myPos.x + lateralOffset.x,
+      y: newY,
+      z: myPos.z + lateralOffset.z,
+    });
+
+    // Teleport animal to new position (swimming upward)
+    this.setPosition(newPos);
+
+    // Show swimming animation
+    this.stopModelAnimations(['idle']);
+    this.startModelLoopedAnimations(['walk']);
+
+    // Continue floating up if still submerged
+    setTimeout(() => {
+      if (this._isFleeingFlood && this.isSpawned && !this._isFollowing) {
+        this._startFleeingFlood(); // Recursive - will float up again if needed
+      } else {
+        this._isFleeingFlood = false;
+        this.stopModelAnimations(['walk']);
+        this.startModelLoopedAnimations(['idle']);
+      }
+    }, 2000); // Check every 2 seconds
   }
 
   /**
@@ -450,6 +437,12 @@ export default class AnimalEntity extends Entity {
   private _updateFollowBehavior(): void {
     if (!this._followingPlayer) return;
 
+    // PERFORMANCE: Only update follow behavior every 3 ticks (150ms) instead of every tick (50ms)
+    // This reduces follow updates from ~460/sec to ~153/sec (67% reduction with 23 animals)
+    this._followUpdateCounter++;
+    if (this._followUpdateCounter < 3) return;
+    this._followUpdateCounter = 0;
+
     // Get player entity position
     const playerEntities = this.world?.entityManager.getPlayerEntitiesByPlayer(this._followingPlayer);
     if (!playerEntities || playerEntities.length === 0) {
@@ -460,6 +453,21 @@ export default class AnimalEntity extends Entity {
     const playerEntity = playerEntities[0];
     const playerPos = playerEntity.position;
     const myPos = this.position;
+
+    // PERFORMANCE: Skip update if player hasn't moved significantly (< 0.5 blocks)
+    if (this._lastPlayerPos) {
+      const playerDx = playerPos.x - this._lastPlayerPos.x;
+      const playerDz = playerPos.z - this._lastPlayerPos.z;
+      const playerMovedSq = playerDx * playerDx + playerDz * playerDz;
+
+      // If player moved less than 0.5 blocks, skip this update entirely
+      if (playerMovedSq < 0.25) {
+        return;
+      }
+    }
+
+    // Cache player position for next check
+    this._lastPlayerPos = { x: playerPos.x, y: playerPos.y, z: playerPos.z };
 
     // Calculate distance to player (PERFORMANCE: Use squared distance to avoid sqrt)
     const dx = playerPos.x - myPos.x;
@@ -485,6 +493,7 @@ export default class AnimalEntity extends Entity {
       this.setPosition(teleportPos);
       this._pathfindCooldown = 60; // Reset cooldown after teleport
       this._lastPathfindTarget = null;
+      this._lastPlayerPos = null; // Clear cache after teleport
       return;
     }
 

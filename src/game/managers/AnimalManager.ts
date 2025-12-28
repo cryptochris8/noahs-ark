@@ -71,6 +71,40 @@ export default class AnimalManager {
   }
 
   /**
+   * PERFORMANCE: Get nearby animals within a radius (for Animal Magnet power-up)
+   * Uses early rejection tests to avoid expensive distance calculations
+   */
+  public getNearbyAnimals(position: Vector3Like, radius: number, maxCount: number = Infinity): AnimalEntity[] {
+    const radiusSquared = radius * radius;
+    const nearby: AnimalEntity[] = [];
+
+    for (const animal of this._animals) {
+      // Quick checks first (cheapest operations)
+      if (!animal.isSpawned || animal.isFollowing) continue;
+
+      // PERFORMANCE: Quick axis-aligned rejection test (avoids sqrt)
+      // If the animal is more than radius blocks away on ANY axis, skip it
+      const dx = animal.position.x - position.x;
+      if (Math.abs(dx) > radius) continue; // X-axis rejection
+
+      const dz = animal.position.z - position.z;
+      if (Math.abs(dz) > radius) continue; // Z-axis rejection
+
+      // Only now calculate squared distance (no sqrt needed!)
+      const distanceSquared = dx * dx + dz * dz;
+
+      if (distanceSquared <= radiusSquared) {
+        nearby.push(animal);
+
+        // PERFORMANCE: Early exit when we have enough animals
+        if (nearby.length >= maxCount) break;
+      }
+    }
+
+    return nearby;
+  }
+
+  /**
    * Get count of pairs collected for a specific animal type
    */
   public getPairsCollected(animalType: string): number {
@@ -96,6 +130,7 @@ export default class AnimalManager {
 
   /**
    * Spawn initial animals based on game config
+   * PERFORMANCE: Animals spawn as static (no tick events) until player interacts
    */
   public spawnInitialAnimals(): void {
     const config = GameConfig.instance;
@@ -105,33 +140,57 @@ export default class AnimalManager {
       // Spawn 2 animals per required pair (need pairs to collect)
       const animalsToSpawn = animalType.pairs_required * 2;
 
+      // PERFORMANCE: Spawn pairs on opposite sides of the map
       for (let i = 0; i < animalsToSpawn; i++) {
-        this._spawnAnimalOfType(animalType.id, animalType.spawn_tags, animalType.preferred_tiers);
+        const spawnOnNorthSide = i % 2 === 0; // First animal north, second south (for pairs)
+        this._spawnAnimalOfType(animalType.id, animalType.spawn_tags, animalType.preferred_tiers, spawnOnNorthSide);
       }
     }
   }
 
   /**
    * Spawn a specific animal type at an appropriate location
+   * @param spawnOnNorthSide - If true, spawn on north side (Z > 0), else south side (Z <= 0)
    */
-  private _spawnAnimalOfType(animalType: string, spawnTags: string[], preferredTiers: number[]): AnimalEntity | null {
+  private _spawnAnimalOfType(animalType: string, spawnTags: string[], preferredTiers: number[], spawnOnNorthSide: boolean = false): AnimalEntity | null {
     if (this._animals.size >= this._maxAnimals) {
       return null;
     }
 
+    // PERFORMANCE: Only spawn in mid-to-top tiers (Tier 2 and 3) to keep animals safe from flood
+    const safeTiers = [2, 3];
+
     // Find suitable spawn zones
     const suitableZones = SPAWN_ZONES.filter(zone => {
+      // PERFORMANCE: Only use mid-to-top tiers (safe from flood at start)
+      if (!safeTiers.includes(zone.tier)) return false;
+
+      // PERFORMANCE: Filter by map side (north vs south)
+      if (spawnOnNorthSide && zone.position.z <= 0) return false;
+      if (!spawnOnNorthSide && zone.position.z > 0) return false;
+
       // Check if zone has matching tags (or animal has no tag preference)
       const hasMatchingTag = spawnTags.some(tag => zone.tags.includes(tag)) || spawnTags.length === 0;
-      // Check if zone is in preferred tier (or animal has no tier preference)
-      const isPreferredTier = preferredTiers.includes(zone.tier) || preferredTiers.length === 0;
-      // Zone must match BOTH biome AND tier preferences (stricter matching)
-      return hasMatchingTag && isPreferredTier;
+
+      return hasMatchingTag;
     });
 
     if (suitableZones.length === 0) {
-      // Fallback to any zone
-      const randomZone = SPAWN_ZONES[Math.floor(Math.random() * SPAWN_ZONES.length)];
+      // Fallback: Use any mid-to-top tier zone on the correct side
+      const fallbackZones = SPAWN_ZONES.filter(zone => {
+        const isSafeTier = safeTiers.includes(zone.tier);
+        const isCorrectSide = spawnOnNorthSide ? zone.position.z > 0 : zone.position.z <= 0;
+        return isSafeTier && isCorrectSide;
+      });
+
+      if (fallbackZones.length === 0) {
+        // Last resort: any safe tier zone
+        const anySafeZone = SPAWN_ZONES.find(zone => safeTiers.includes(zone.tier));
+        if (!anySafeZone) return null;
+        return this._spawnAnimalAt(animalType, anySafeZone);
+      }
+
+      const randomZone = fallbackZones[Math.floor(Math.random() * fallbackZones.length)];
       return this._spawnAnimalAt(animalType, randomZone);
     }
 
@@ -150,27 +209,33 @@ export default class AnimalManager {
       spawnTier: zone.tier,
     });
 
-    // Add some random offset to avoid spawning animals on top of each other
-    const offsetX = (Math.random() - 0.5) * 6;
-    const offsetZ = (Math.random() - 0.5) * 6;
+    // Add random offset to spread animals across the zone area
+    // Increased spread for better distribution (±10 blocks instead of ±3)
+    const offsetX = (Math.random() - 0.5) * 20;
+    const offsetZ = (Math.random() - 0.5) * 20;
 
     const targetX = Math.round(zone.position.x + offsetX);
     const targetZ = Math.round(zone.position.z + offsetZ);
 
     // Get ACTUAL terrain height at this position by raycasting down
     // This ensures animals spawn ON TOP of terrain, not inside it
-    let spawnY = zone.position.y + 2; // Default fallback
+    // IMPORTANT: Start raycast much higher and cast further for tall mountains
+    let spawnY = 30; // Higher default fallback for mid-tier zones
 
-    // Raycast from high above to find the actual ground level
-    const rayStart = { x: targetX, y: 50, z: targetZ }; // Start high
+    // Raycast from very high above to find the actual ground level
+    const rayStart = { x: targetX, y: 100, z: targetZ }; // Start very high (above tallest mountain)
     const rayDir = { x: 0, y: -1, z: 0 }; // Cast downward
-    const rayResult = this._world.simulation.raycast(rayStart, rayDir, 60, {
+    const rayResult = this._world.simulation.raycast(rayStart, rayDir, 120, {
       filterFlags: 2, // Only hit blocks, not entities
     });
 
     if (rayResult && rayResult.hitPoint) {
       // Spawn 1.5 blocks above the hit point (on top of terrain)
       spawnY = rayResult.hitPoint.y + 1.5;
+    } else {
+      // Raycast failed - use zone's Y position as safer fallback
+      // Add extra height to ensure we're above terrain
+      spawnY = Math.max(zone.position.y + 5, 25);
     }
 
     const spawnPos = {
@@ -206,9 +271,10 @@ export default class AnimalManager {
     const animalConfig = GameConfig.instance.getAnimalTypeById(animalType);
     if (!animalConfig) return;
 
-    // Spawn 2 new animals of this type
+    // Spawn 2 new animals of this type on opposite sides
     for (let i = 0; i < 2; i++) {
-      this._spawnAnimalOfType(animalType, animalConfig.spawn_tags, animalConfig.preferred_tiers);
+      const spawnOnNorthSide = i % 2 === 0;
+      this._spawnAnimalOfType(animalType, animalConfig.spawn_tags, animalConfig.preferred_tiers, spawnOnNorthSide);
     }
   }
 
