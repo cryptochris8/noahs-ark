@@ -130,11 +130,11 @@
   <a id="mobile-sprint-button" class="mobile-button mobile-sprint">
     <span>⚡</span>
   </a>
-  <a id="mobile-interact-button" class="mobile-button">
-    <span>E</span>
+  <a id="mobile-interact-button" class="mobile-button mobile-interact">
+    <span>🐾</span>
   </a>
-  <a id="mobile-deliver-button" class="mobile-button">
-    <span>F</span>
+  <a id="mobile-deliver-button" class="mobile-button mobile-deliver">
+    <span>🚢</span>
   </a>
   <a id="mobile-jump-button" class="mobile-button">
     <span>↑</span>
@@ -1679,5 +1679,29 @@
   .mobile-button.mobile-sprint.active {
     background-color: rgba(255, 165, 0, 0.7);
     box-shadow: 0 0 10px rgba(255, 165, 0, 0.5);
+  }
+
+  /* Interact button (paw) - green for animals */
+  .mobile-button.mobile-interact {
+    background-color: rgba(100, 200, 100, 0.4);
+    border: 2px solid rgba(100, 200, 100, 0.6);
+    font-size: 22px;
+  }
+
+  .mobile-button.mobile-interact.active {
+    background-color: rgba(100, 200, 100, 0.7);
+    box-shadow: 0 0 10px rgba(100, 200, 100, 0.5);
+  }
+
+  /* Deliver button (ark) - gold/brown for the ark */
+  .mobile-button.mobile-deliver {
+    background-color: rgba(180, 140, 80, 0.4);
+    border: 2px solid rgba(255, 215, 0, 0.6);
+    font-size: 22px;
+  }
+
+  .mobile-button.mobile-deliver.active {
+    background-color: rgba(180, 140, 80, 0.7);
+    box-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
   }
 </style>
