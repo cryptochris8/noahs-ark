@@ -13,6 +13,14 @@ interface SpawnZone {
   tags: string[];
 }
 
+// Maximum spawn height - must be BELOW the drop-off platform (Y=24 for mount-ararat)
+// This prevents animals from spawning higher than where players need to deliver them
+const MAX_SPAWN_HEIGHT = 23;
+
+// Minimum spawn height - must be ABOVE the flood starting level
+// Flood starts at Y=2 and rises, so animals should spawn well above this
+const MIN_SPAWN_HEIGHT = 12;
+
 // Map-specific spawn zones loaded from JSON files
 import mountAraratSpawnZones from '../../../assets/mount-ararat-spawn-zones.json';
 import plainsOfShinarSpawnZones from '../../../assets/plains-of-shinar-spawn-zones.json';
@@ -23,6 +31,7 @@ const MAP_NAME = process.env.MAP_NAME || 'mount-ararat';
 // Convert JSON spawn zones to SpawnZone format
 // For mount-ararat solo mode, only use south-side zones (Z <= 0)
 // North-side zones are reserved for future PVP mode
+// Also filters out zones above the drop-off platform height and below flood level
 function loadSpawnZones(mapName: string): SpawnZone[] {
   const rawZones = mapName === 'mount-ararat' ? mountAraratSpawnZones : plainsOfShinarSpawnZones;
 
@@ -31,8 +40,21 @@ function loadSpawnZones(mapName: string): SpawnZone[] {
       // For mount-ararat, only include south-side zones (Z <= 0) for solo mode
       // This excludes north-t1-*, north-t2-*, north-t3-* zones
       if (mapName === 'mount-ararat') {
-        return zone.z <= 0;
+        if (zone.z > 0) return false;
       }
+
+      // Filter out zones that are above the drop-off platform
+      // Animals should spawn BELOW where players need to deliver them
+      if (zone.y > MAX_SPAWN_HEIGHT) {
+        return false;
+      }
+
+      // Filter out zones that are too low (would be in flood waters)
+      // Only use Tier 2 zones (Y=15) which are safely above flood
+      if (zone.y < MIN_SPAWN_HEIGHT) {
+        return false;
+      }
+
       return true;
     })
     .map((zone: any) => ({
@@ -131,43 +153,44 @@ export default class AnimalManager {
   /**
    * Spawn initial animals based on game config
    * PERFORMANCE: Animals spawn as static (no tick events) until player interacts
+   * DISTRIBUTION: Animals are spread across different zones to prevent clustering
+   *               Pairs are split between east and west sides of the map
    */
   public spawnInitialAnimals(): void {
     const config = GameConfig.instance;
+
+    // Track which zones have been used recently to spread animals out
+    const zoneUsageCount: Map<string, number> = new Map();
 
     // Spawn animals for each type based on pairs required
     for (const animalType of config.animalTypes) {
       // Spawn 2 animals per required pair (need pairs to collect)
       const animalsToSpawn = animalType.pairs_required * 2;
 
-      // PERFORMANCE: Spawn pairs on opposite sides of the map
+      // Spread the pair across east/west sides of the map
       for (let i = 0; i < animalsToSpawn; i++) {
-        const spawnOnNorthSide = i % 2 === 0; // First animal north, second south (for pairs)
-        this._spawnAnimalOfType(animalType.id, animalType.spawn_tags, animalType.preferred_tiers, spawnOnNorthSide);
+        const spawnOnEastSide = i % 2 === 0; // First animal east, second west (split pairs)
+        this._spawnAnimalOfType(animalType.id, animalType.spawn_tags, animalType.preferred_tiers, spawnOnEastSide, zoneUsageCount);
       }
     }
   }
 
   /**
    * Spawn a specific animal type at an appropriate location
-   * @param spawnOnNorthSide - If true, spawn on north side (Z > 0), else south side (Z <= 0)
+   * @param spawnOnEastSide - If true, spawn on east side (X >= 0), else west side (X < 0)
+   * @param zoneUsageCount - Optional tracking of zone usage for better distribution
    */
-  private _spawnAnimalOfType(animalType: string, spawnTags: string[], preferredTiers: number[], spawnOnNorthSide: boolean = false): AnimalEntity | null {
+  private _spawnAnimalOfType(animalType: string, spawnTags: string[], preferredTiers: number[], spawnOnEastSide: boolean = false, zoneUsageCount?: Map<string, number>): AnimalEntity | null {
     if (this._animals.size >= this._maxAnimals) {
       return null;
     }
 
-    // PERFORMANCE: Only spawn in mid-to-top tiers (Tier 2 and 3) to keep animals safe from flood
-    const safeTiers = [2, 3];
-
-    // Find suitable spawn zones
+    // Find suitable spawn zones based on east/west preference
     const suitableZones = SPAWN_ZONES.filter(zone => {
-      // PERFORMANCE: Only use mid-to-top tiers (safe from flood at start)
-      if (!safeTiers.includes(zone.tier)) return false;
-
-      // PERFORMANCE: Filter by map side (north vs south)
-      if (spawnOnNorthSide && zone.position.z <= 0) return false;
-      if (!spawnOnNorthSide && zone.position.z > 0) return false;
+      // Filter by map side (east vs west based on X coordinate)
+      // East side: X >= 0, West side: X < 0
+      if (spawnOnEastSide && zone.position.x < 0) return false;
+      if (!spawnOnEastSide && zone.position.x >= 0) return false;
 
       // Check if zone has matching tags (or animal has no tag preference)
       const hasMatchingTag = spawnTags.some(tag => zone.tags.includes(tag)) || spawnTags.length === 0;
@@ -176,32 +199,69 @@ export default class AnimalManager {
     });
 
     if (suitableZones.length === 0) {
-      // Fallback: Use any mid-to-top tier zone on the correct side
+      // Fallback: Use any zone on the correct side (ignore biome tags)
       const fallbackZones = SPAWN_ZONES.filter(zone => {
-        const isSafeTier = safeTiers.includes(zone.tier);
-        const isCorrectSide = spawnOnNorthSide ? zone.position.z > 0 : zone.position.z <= 0;
-        return isSafeTier && isCorrectSide;
+        const isCorrectSide = spawnOnEastSide ? zone.position.x >= 0 : zone.position.x < 0;
+        return isCorrectSide;
       });
 
       if (fallbackZones.length === 0) {
-        // Last resort: any safe tier zone
-        const anySafeZone = SPAWN_ZONES.find(zone => safeTiers.includes(zone.tier));
-        if (!anySafeZone) return null;
-        return this._spawnAnimalAt(animalType, anySafeZone);
+        // Last resort: any zone (regardless of side)
+        if (SPAWN_ZONES.length === 0) return null;
+        const zone = this._selectLeastUsedZone(SPAWN_ZONES, zoneUsageCount);
+        return this._spawnAnimalAt(animalType, zone);
       }
 
-      const randomZone = fallbackZones[Math.floor(Math.random() * fallbackZones.length)];
-      return this._spawnAnimalAt(animalType, randomZone);
+      const zone = this._selectLeastUsedZone(fallbackZones, zoneUsageCount);
+      return this._spawnAnimalAt(animalType, zone);
     }
 
-    // Pick a random suitable zone
-    const zone = suitableZones[Math.floor(Math.random() * suitableZones.length)];
+    // Pick the least-used zone to spread animals out
+    const zone = this._selectLeastUsedZone(suitableZones, zoneUsageCount);
     return this._spawnAnimalAt(animalType, zone);
+  }
+
+  /**
+   * Select the zone with the lowest usage count to spread animals across the map
+   * This prevents clustering by preferring zones that have fewer animals
+   */
+  private _selectLeastUsedZone(zones: SpawnZone[], zoneUsageCount?: Map<string, number>): SpawnZone {
+    if (!zoneUsageCount || zones.length <= 1) {
+      // No tracking or only one zone - pick randomly
+      return zones[Math.floor(Math.random() * zones.length)];
+    }
+
+    // Find the minimum usage count among available zones
+    let minUsage = Infinity;
+    for (const zone of zones) {
+      const key = `${zone.position.x},${zone.position.z}`;
+      const usage = zoneUsageCount.get(key) ?? 0;
+      if (usage < minUsage) {
+        minUsage = usage;
+      }
+    }
+
+    // Get all zones with the minimum usage count
+    const leastUsedZones = zones.filter(zone => {
+      const key = `${zone.position.x},${zone.position.z}`;
+      const usage = zoneUsageCount.get(key) ?? 0;
+      return usage === minUsage;
+    });
+
+    // Pick randomly from the least-used zones
+    const selectedZone = leastUsedZones[Math.floor(Math.random() * leastUsedZones.length)];
+
+    // Update the usage count
+    const key = `${selectedZone.position.x},${selectedZone.position.z}`;
+    zoneUsageCount.set(key, (zoneUsageCount.get(key) ?? 0) + 1);
+
+    return selectedZone;
   }
 
   /**
    * Spawn an animal at a specific zone with some random offset
    * Uses ACTUAL terrain height from the world, not the outdated JSON values
+   * Caps spawn height to ensure animals spawn BELOW the drop-off platform
    */
   private _spawnAnimalAt(animalType: string, zone: SpawnZone): AnimalEntity {
     const animal = new AnimalEntity({
@@ -210,9 +270,9 @@ export default class AnimalManager {
     });
 
     // Add random offset to spread animals across the zone area
-    // Increased spread for better distribution (±10 blocks instead of ±3)
-    const offsetX = (Math.random() - 0.5) * 20;
-    const offsetZ = (Math.random() - 0.5) * 20;
+    // Increased spread for better distribution (±12 blocks)
+    const offsetX = (Math.random() - 0.5) * 24;
+    const offsetZ = (Math.random() - 0.5) * 24;
 
     const targetX = Math.round(zone.position.x + offsetX);
     const targetZ = Math.round(zone.position.z + offsetZ);
@@ -220,7 +280,7 @@ export default class AnimalManager {
     // Get ACTUAL terrain height at this position by raycasting down
     // This ensures animals spawn ON TOP of terrain, not inside it
     // IMPORTANT: Start raycast much higher and cast further for tall mountains
-    let spawnY = 30; // Higher default fallback for mid-tier zones
+    let spawnY = 15; // Default fallback for Tier 1/2 zones
 
     // Raycast from very high above to find the actual ground level
     const rayStart = { x: targetX, y: 100, z: targetZ }; // Start very high (above tallest mountain)
@@ -235,7 +295,16 @@ export default class AnimalManager {
     } else {
       // Raycast failed - use zone's Y position as safer fallback
       // Add extra height to ensure we're above terrain
-      spawnY = Math.max(zone.position.y + 5, 25);
+      spawnY = Math.max(zone.position.y + 3, 10);
+    }
+
+    // IMPORTANT: Enforce spawn height limits
+    // Animals should spawn ABOVE the flood level but BELOW the drop-off platform
+    if (spawnY < MIN_SPAWN_HEIGHT) {
+      spawnY = MIN_SPAWN_HEIGHT;
+    }
+    if (spawnY > MAX_SPAWN_HEIGHT) {
+      spawnY = MAX_SPAWN_HEIGHT;
     }
 
     const spawnPos = {
@@ -271,10 +340,10 @@ export default class AnimalManager {
     const animalConfig = GameConfig.instance.getAnimalTypeById(animalType);
     if (!animalConfig) return;
 
-    // Spawn 2 new animals of this type on opposite sides
+    // Spawn 2 new animals of this type on opposite sides (east/west)
     for (let i = 0; i < 2; i++) {
-      const spawnOnNorthSide = i % 2 === 0;
-      this._spawnAnimalOfType(animalType, animalConfig.spawn_tags, animalConfig.preferred_tiers, spawnOnNorthSide);
+      const spawnOnEastSide = i % 2 === 0;
+      this._spawnAnimalOfType(animalType, animalConfig.spawn_tags, animalConfig.preferred_tiers, spawnOnEastSide);
     }
   }
 

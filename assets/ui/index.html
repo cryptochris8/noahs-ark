@@ -40,6 +40,18 @@
     </div>
   </div>
 
+  <!-- Remaining Animals Panel (collapsible) -->
+  <div id="remaining-animals-container" class="remaining-animals-container">
+    <div id="remaining-animals-header" class="remaining-animals-header">
+      <span class="remaining-title">Animals Needed</span>
+      <span id="remaining-count" class="remaining-count">23</span>
+      <span id="remaining-toggle" class="remaining-toggle">▼</span>
+    </div>
+    <div id="remaining-animals-list" class="remaining-animals-list">
+      <!-- Populated by JavaScript -->
+    </div>
+  </div>
+
   <!-- Match Arrows (screen-edge indicators) -->
   <div id="match-arrows-container" class="match-arrows-container"></div>
 
@@ -156,8 +168,13 @@
     // Active power-ups
     activePowerUps: [],
     // Score
-    score: 0
+    score: 0,
+    // Uncollected animals
+    uncollectedAnimals: []
   };
+
+  // Remaining animals panel state
+  let remainingAnimalsExpanded = false;
 
   // DOM Elements
   const floodFill = document.getElementById('flood-fill');
@@ -185,6 +202,28 @@
   const arkArrowContainer = document.getElementById('ark-arrow-container');
   const restartCountdown = document.getElementById('restart-countdown');
   const restartSeconds = document.getElementById('restart-seconds');
+  const remainingAnimalsContainer = document.getElementById('remaining-animals-container');
+  const remainingAnimalsHeader = document.getElementById('remaining-animals-header');
+  const remainingAnimalsList = document.getElementById('remaining-animals-list');
+  const remainingCount = document.getElementById('remaining-count');
+  const remainingToggle = document.getElementById('remaining-toggle');
+
+  // Toggle remaining animals panel
+  if (remainingAnimalsHeader) {
+    remainingAnimalsHeader.addEventListener('click', () => {
+      remainingAnimalsExpanded = !remainingAnimalsExpanded;
+      if (remainingAnimalsExpanded) {
+        remainingAnimalsList.classList.add('expanded');
+        remainingToggle.textContent = '▲';
+      } else {
+        remainingAnimalsList.classList.remove('expanded');
+        remainingToggle.textContent = '▼';
+      }
+    });
+    // Make it clickable
+    remainingAnimalsHeader.style.cursor = 'pointer';
+    remainingAnimalsHeader.style.pointerEvents = 'auto';
+  }
 
   // Format time as M:SS
   function formatTime(seconds) {
@@ -240,6 +279,33 @@
 
     // Update power-ups display
     updatePowerupsDisplay();
+
+    // Update remaining animals display
+    updateRemainingAnimals();
+  }
+
+  // Update the remaining animals panel
+  function updateRemainingAnimals() {
+    if (!remainingAnimalsContainer || !remainingAnimalsList || !remainingCount) return;
+
+    const uncollected = gameState.uncollectedAnimals || [];
+
+    // Update count in header
+    remainingCount.textContent = uncollected.length;
+
+    // Hide panel if all animals collected
+    if (uncollected.length === 0) {
+      remainingAnimalsContainer.classList.add('all-collected');
+      remainingAnimalsList.innerHTML = '<span class="all-done">✓ All pairs collected!</span>';
+      return;
+    }
+
+    remainingAnimalsContainer.classList.remove('all-collected');
+
+    // Build the list of remaining animals
+    remainingAnimalsList.innerHTML = uncollected.map(animal =>
+      `<span class="remaining-animal">${animal}</span>`
+    ).join('');
   }
 
   // Update stamina bar when swimming
@@ -707,7 +773,9 @@
         // Active power-ups
         activePowerUps: data.activePowerUps || [],
         // Score
-        score: data.score || 0
+        score: data.score || 0,
+        // Uncollected animals (remaining to collect)
+        uncollectedAnimals: data.uncollectedAnimals || []
       };
       updateUI();
     } else if (data.type === 'notification') {
@@ -916,6 +984,89 @@
     border-radius: 8px;
     padding: 8px;
     pointer-events: none;
+  }
+
+  /* Remaining Animals Panel */
+  .remaining-animals-container {
+    position: absolute;
+    top: 295px;
+    right: 16px;
+    width: 160px;
+    background: rgba(0, 0, 0, 0.7);
+    border: 2px solid rgba(100, 180, 100, 0.6);
+    border-radius: 8px;
+    overflow: hidden;
+    z-index: 45;
+  }
+
+  .remaining-animals-container.all-collected {
+    border-color: rgba(100, 255, 100, 0.8);
+  }
+
+  .remaining-animals-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 10px;
+    background: rgba(60, 100, 60, 0.5);
+    border-bottom: 1px solid rgba(100, 180, 100, 0.3);
+  }
+
+  .remaining-title {
+    color: #90EE90;
+    font-size: 11px;
+    font-weight: bold;
+    text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
+  }
+
+  .remaining-count {
+    background: rgba(100, 200, 100, 0.3);
+    color: #fff;
+    font-size: 12px;
+    font-weight: bold;
+    padding: 2px 8px;
+    border-radius: 10px;
+    min-width: 20px;
+    text-align: center;
+  }
+
+  .remaining-toggle {
+    color: #90EE90;
+    font-size: 10px;
+    transition: transform 0.2s ease;
+  }
+
+  .remaining-animals-list {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.3s ease;
+    padding: 0 8px;
+  }
+
+  .remaining-animals-list.expanded {
+    max-height: 200px;
+    overflow-y: auto;
+    padding: 8px;
+  }
+
+  .remaining-animal {
+    display: inline-block;
+    background: rgba(100, 150, 100, 0.3);
+    color: #ccc;
+    font-size: 10px;
+    padding: 3px 6px;
+    margin: 2px;
+    border-radius: 4px;
+    text-transform: capitalize;
+  }
+
+  .all-done {
+    display: block;
+    color: #90EE90;
+    font-size: 12px;
+    font-weight: bold;
+    text-align: center;
+    padding: 8px;
   }
 
   #minimap-canvas {
@@ -1155,7 +1306,7 @@
   /* Active Power-ups Display */
   .powerups-container {
     position: fixed;
-    top: 320px;
+    top: 340px;
     right: 16px;
     display: flex;
     flex-direction: column;

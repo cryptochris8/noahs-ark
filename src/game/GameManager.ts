@@ -434,12 +434,15 @@ export default class GameManager {
   private _handlePairCompleted(animalType: string, animal1: AnimalEntity, animal2: AnimalEntity): void {
     if (!this._animalManager || !this._world) return;
 
-    // Record the pair
-    this._animalManager.recordPairCollected(animalType);
-
-    // Track this animal type as collected (for UI - uncollected animals list)
+    // Track this animal type as collected - check if this is the FIRST time
     const wasFirstCollection = !this._collectedAnimalTypes.has(animalType);
     this._collectedAnimalTypes.add(animalType);
+
+    // Only record the pair for counting if it's the FIRST collection of this animal type
+    // Respawned pairs don't count towards the total (only for bonus points)
+    if (wasFirstCollection) {
+      this._animalManager.recordPairCollected(animalType);
+    }
 
     // Get the display name
     const animalConfig = GameConfig.instance.getAnimalTypeById(animalType);
@@ -457,14 +460,23 @@ export default class GameManager {
     this._animalManager.removeAnimal(animal2);
     this._animalManager.respawnAnimalsIfNeeded(animalType);
 
-    // Award points for pair delivery
+    // Award points for pair delivery (always award points, even for duplicate types)
     if (deliveryPlayer && this._scoreManager && GameConfig.instance.scoring.enabled) {
       const points = this._scoreManager.awardPairDelivery(deliveryPlayer);
-      this._world?.chatManager.sendPlayerMessage(deliveryPlayer, `+${points} points for ${displayName} pair!`, 'FFD700');
+      if (wasFirstCollection) {
+        this._world?.chatManager.sendPlayerMessage(deliveryPlayer, `+${points} points for ${displayName} pair!`, 'FFD700');
+      } else {
+        // Bonus pair - still award points but different message
+        this._world?.chatManager.sendPlayerMessage(deliveryPlayer, `+${points} bonus points for extra ${displayName} pair!`, 'AAFFAA');
+      }
     }
 
-    // Broadcast success
-    this._broadcastMessage(`${displayName} pair saved!`, 'FFD700');
+    // Broadcast success with appropriate message
+    if (wasFirstCollection) {
+      this._broadcastMessage(`${displayName} pair saved!`, 'FFD700');
+    } else {
+      this._broadcastMessage(`Bonus ${displayName} pair delivered!`, 'AAFFAA');
+    }
     this._broadcastUIUpdate();
 
     // Check for victory - all unique animal types must be collected at least once
@@ -1158,8 +1170,8 @@ export default class GameManager {
       activePowerUps: this._powerUpManager?.getActiveEffectsForUI(player.id) ?? [],
       // Score data
       score: playerScore,
-      // ONLY send full uncollected list occasionally, not every update
-      ...(this._collectedAnimalTypes.size === 0 || uncollectedAnimals.length < 5 ? { uncollectedAnimals } : {}),
+      // Always send the uncollected animals list so UI can show remaining animals
+      uncollectedAnimals: uncollectedAnimals,
     };
 
     // PERFORMANCE: Create a hash of the state to detect changes

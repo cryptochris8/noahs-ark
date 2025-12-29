@@ -199,6 +199,24 @@ export default class FloodManager {
   public reset(): void {
     this.stop();
     this._currentHeight = GameConfig.instance.flood.start_height_y;
+
+    // IMPORTANT: Also reset the visual flood water immediately
+    if (this._floodVisual) {
+      this._floodVisual.setHeight(this._currentHeight);
+    }
+
+    // Reset the flood collider position
+    if (this._floodCollider) {
+      // Remove old collider
+      this._floodCollider.removeFromSimulation();
+      this._floodCollider = null;
+    }
+
+    // Reset all player swimming states
+    this._playerSwimmingStates.clear();
+
+    // Reset flags
+    this._hasStarted = false;
   }
 
   /**
