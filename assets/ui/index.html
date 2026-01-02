@@ -119,25 +119,39 @@
   </div>
 </div>
 
-<!-- Controls Hint -->
-<div class="controls-hint">
-  <span>[E] Interact with animals</span>
-  <span>[F] Deliver to Ark</span>
+<!-- Controls Hint (Desktop) -->
+<div class="controls-hint desktop-only">
+  <span>Click animals to collect</span>
+  <span>Click checkpoint to deliver</span>
 </div>
 
-<!-- Mobile Controls -->
+<!-- Mobile Tutorial Hint (shows briefly on start) -->
+<div id="mobile-tutorial" class="mobile-tutorial">
+  <div class="tutorial-content">
+    <div class="tutorial-step">
+      <span class="tutorial-icon">👆</span>
+      <span class="tutorial-text">Tap animals to collect them</span>
+    </div>
+    <div class="tutorial-step">
+      <span class="tutorial-icon">🎯</span>
+      <span class="tutorial-text">Tap the glowing marker to deliver pairs</span>
+    </div>
+    <div class="tutorial-step">
+      <span class="tutorial-icon">🗺️</span>
+      <span class="tutorial-text">Follow arrows to find matches</span>
+    </div>
+  </div>
+</div>
+
+<!-- Mobile Controls (simplified - tap-to-interact handles most actions) -->
 <div class="mobile-controls">
-  <a id="mobile-sprint-button" class="mobile-button mobile-sprint">
-    <span>⚡</span>
+  <a id="mobile-sprint-button" class="mobile-button mobile-sprint" title="Sprint">
+    <span class="button-icon">⚡</span>
+    <span class="button-label">RUN</span>
   </a>
-  <a id="mobile-interact-button" class="mobile-button mobile-interact">
-    <span>🐾</span>
-  </a>
-  <a id="mobile-deliver-button" class="mobile-button mobile-deliver">
-    <span>🚢</span>
-  </a>
-  <a id="mobile-jump-button" class="mobile-button">
-    <span>↑</span>
+  <a id="mobile-jump-button" class="mobile-button mobile-jump" title="Jump">
+    <span class="button-icon">↑</span>
+    <span class="button-label">JUMP</span>
   </a>
 </div>
 
@@ -809,9 +823,22 @@
     }
   });
 
+  // Mobile Tutorial - Auto-hide after 5 seconds
+  const mobileTutorial = document.getElementById('mobile-tutorial');
+  if (mobileTutorial && window.hytopia && hytopia.isMobile) {
+    setTimeout(() => {
+      mobileTutorial.classList.add('hidden');
+    }, 5000);
+
+    // Also hide on first tap anywhere
+    document.addEventListener('touchstart', function hideTutorial() {
+      mobileTutorial.classList.add('hidden');
+      document.removeEventListener('touchstart', hideTutorial);
+    }, { once: true });
+  }
+
   // Mobile Controls - Using SDK input keys: 'sp' = space/jump, 'sh' = shift/sprint
-  const mobileInteractButton = document.getElementById('mobile-interact-button');
-  const mobileDeliverButton = document.getElementById('mobile-deliver-button');
+  // Note: Interact and Deliver buttons removed - tap-to-interact handles these now!
   const mobileJumpButton = document.getElementById('mobile-jump-button');
   const mobileSprintButton = document.getElementById('mobile-sprint-button');
 
@@ -835,12 +862,6 @@
     button.addEventListener('touchend', handleEnd, { passive: false });
     button.addEventListener('touchcancel', handleEnd, { passive: false }); // Handle interrupted touches
   }
-
-  // Interact button (E key)
-  addMobileButtonHandlers(mobileInteractButton, 'e');
-
-  // Deliver button (F key)
-  addMobileButtonHandlers(mobileDeliverButton, 'f');
 
   // Jump button (Space - SDK uses 'sp' for space key)
   addMobileButtonHandlers(mobileJumpButton, 'sp');
@@ -1626,6 +1647,66 @@
     display: none;
   }
 
+  /* Desktop-only elements */
+  .desktop-only {
+    display: block;
+  }
+  body.mobile .desktop-only {
+    display: none;
+  }
+
+  /* Mobile Tutorial (shows on game start) */
+  .mobile-tutorial {
+    display: none;
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(0, 0, 0, 0.85);
+    border-radius: 16px;
+    padding: 24px 32px;
+    z-index: 200;
+    animation: tutorialFadeIn 0.5s ease-out;
+  }
+
+  body.mobile .mobile-tutorial {
+    display: block;
+  }
+
+  .mobile-tutorial.hidden {
+    display: none !important;
+  }
+
+  .tutorial-content {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .tutorial-step {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    color: white;
+    font-size: 16px;
+    font-family: 'Inter', sans-serif;
+  }
+
+  .tutorial-icon {
+    font-size: 28px;
+    width: 40px;
+    text-align: center;
+  }
+
+  .tutorial-text {
+    font-weight: 500;
+  }
+
+  @keyframes tutorialFadeIn {
+    from { opacity: 0; transform: translate(-50%, -50%) scale(0.9); }
+    to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  }
+
   /* Mobile Controls */
   .mobile-controls {
     display: none;
@@ -1633,75 +1714,84 @@
 
   body.mobile .mobile-controls {
     display: flex;
-    gap: 14px;
+    gap: 16px;
     position: fixed;
-    bottom: 40px;
-    right: 40px;
+    bottom: 30px;
+    right: 30px;
   }
 
   .mobile-button {
-    background-color: rgba(0, 0, 0, 0.5);
-    border-radius: 50%;
+    background-color: rgba(0, 0, 0, 0.6);
+    border-radius: 12px;
     align-items: center;
     justify-content: center;
     display: flex;
-    width: 50px;
-    height: 50px;
+    flex-direction: column;
+    width: 60px;
+    height: 60px;
     transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
     will-change: transform, background-color;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
     font-family: 'Inter', sans-serif;
-    font-size: 18px;
-    font-weight: bold;
-    color: rgba(255, 255, 255, 0.8);
+    color: rgba(255, 255, 255, 0.9);
     text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.8);
     pointer-events: auto !important;
     text-decoration: none;
+    border: 2px solid rgba(255, 255, 255, 0.3);
   }
 
-  .mobile-button img {
-    width: 22px;
-    height: 22px;
+  .mobile-button .button-icon {
+    font-size: 22px;
+  }
+
+  .mobile-button .button-label {
+    font-size: 10px;
+    font-weight: bold;
+    letter-spacing: 0.5px;
+    margin-top: 2px;
   }
 
   .mobile-button.active {
     transform: scale(0.92);
-    background-color: rgba(0, 0, 0, 0.75);
-    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+    background-color: rgba(0, 0, 0, 0.85);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
   }
 
   /* Sprint button special styling */
   .mobile-button.mobile-sprint {
-    background-color: rgba(255, 165, 0, 0.4);
-    border: 2px solid rgba(255, 165, 0, 0.6);
+    background-color: rgba(255, 165, 0, 0.5);
+    border: 2px solid rgba(255, 165, 0, 0.7);
   }
 
   .mobile-button.mobile-sprint.active {
-    background-color: rgba(255, 165, 0, 0.7);
-    box-shadow: 0 0 10px rgba(255, 165, 0, 0.5);
+    background-color: rgba(255, 165, 0, 0.8);
+    box-shadow: 0 0 12px rgba(255, 165, 0, 0.6);
   }
 
-  /* Interact button (paw) - green for animals */
-  .mobile-button.mobile-interact {
-    background-color: rgba(100, 200, 100, 0.4);
-    border: 2px solid rgba(100, 200, 100, 0.6);
-    font-size: 22px;
+  /* Jump button styling */
+  .mobile-button.mobile-jump {
+    background-color: rgba(100, 150, 255, 0.5);
+    border: 2px solid rgba(100, 150, 255, 0.7);
   }
 
-  .mobile-button.mobile-interact.active {
-    background-color: rgba(100, 200, 100, 0.7);
-    box-shadow: 0 0 10px rgba(100, 200, 100, 0.5);
-  }
-
-  /* Deliver button (ark) - gold/brown for the ark */
-  .mobile-button.mobile-deliver {
-    background-color: rgba(180, 140, 80, 0.4);
-    border: 2px solid rgba(255, 215, 0, 0.6);
-    font-size: 22px;
-  }
-
-  .mobile-button.mobile-deliver.active {
-    background-color: rgba(180, 140, 80, 0.7);
-    box-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
+  .mobile-button.mobile-jump.active {
+    background-color: rgba(100, 150, 255, 0.8);
+    box-shadow: 0 0 12px rgba(100, 150, 255, 0.6);
   }
 </style>
+
+<!-- Load SDK-compliant mobile controls -->
+<script>
+(function() {
+  fetch('{{CDN_ASSETS_URL}}/ui/mobile-controls.html')
+    .then(response => response.text())
+    .then(html => {
+      const container = document.createElement('div');
+      container.id = 'mobile-controls-container';
+      container.innerHTML = html;
+      document.body.appendChild(container);
+      console.log('[Mobile Controls] Loaded successfully');
+    })
+    .catch(err => console.error('[Mobile Controls] Failed to load:', err));
+})();
+</script>
