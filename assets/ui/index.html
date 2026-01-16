@@ -33,10 +33,15 @@
 
   <!-- Mini-Map (below timer) -->
   <div id="minimap-container" class="minimap-container">
+    <div class="minimap-header">
+      <span class="minimap-title">MAP</span>
+      <button id="minimap-toggle" class="minimap-toggle" title="Toggle view mode">🔄</button>
+    </div>
     <canvas id="minimap-canvas" width="150" height="150"></canvas>
     <div class="minimap-legend">
-      <span class="legend-player">You</span>
-      <span class="legend-ark">Ark</span>
+      <span class="legend-player">👤 You</span>
+      <span class="legend-ark">⛵ Ark</span>
+      <span class="legend-match">✨ Match</span>
     </div>
   </div>
 
@@ -239,6 +244,17 @@
     remainingAnimalsHeader.style.pointerEvents = 'auto';
   }
 
+  // Mini-map display mode toggle
+  const minimapToggleBtn = document.getElementById('minimap-toggle');
+  if (minimapToggleBtn) {
+    minimapToggleBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      minimapDisplayMode = minimapDisplayMode === 'icons' ? 'dots' : 'icons';
+      minimapToggleBtn.textContent = minimapDisplayMode === 'icons' ? '🔄' : '⚫';
+      minimapToggleBtn.title = minimapDisplayMode === 'icons' ? 'Switch to dot view' : 'Switch to icon view';
+    });
+  }
+
   // Format time as M:SS
   function formatTime(seconds) {
     const mins = Math.floor(seconds / 60);
@@ -426,6 +442,19 @@
     peacock: '#4169E1', bat: '#2F4F4F', dog: '#D2691E', cat: '#FFA500'
   };
 
+  // Animal type to emoji icon mapping for mini-map
+  const ANIMAL_ICONS = {
+    sheep: '🐑', cow: '🐄', pig: '🐷', chicken: '🐔',
+    horse: '🐴', donkey: '🫏', rabbit: '🐰', raccoon: '🦝',
+    beaver: '🦫', frog: '🐸', turtle: '🐢', lizard: '🦎',
+    crab: '🦀', fox: '🦊', wolf: '🐺', bear: '🐻',
+    ocelot: '🐆', capybara: '🦫', penguin: '🐧', flamingo: '🦩',
+    peacock: '🦚', bat: '🦇', dog: '🐕', cat: '🐱', squid: '🦑', bee: '🐝'
+  };
+
+  // Mini-map display mode: 'icons' or 'dots'
+  let minimapDisplayMode = 'icons';
+
   // Draw the mini-map
   function drawMinimap() {
     if (!minimapCtx) return;
@@ -508,43 +537,84 @@
     const blinkVisible = blinkPhase < 0.7; // Visible 70% of the time
     const blinkScale = 1 + Math.sin(blinkPhase * Math.PI * 2) * 0.5; // Pulsing size
 
-    // Draw animals
+    // Draw animals with icons or dots based on display mode
     gameState.animalPositions.forEach(animal => {
       const pos = worldToMinimap(animal.x, animal.z);
       const color = ANIMAL_COLORS[animal.type] || '#AAAAAA';
+      const icon = ANIMAL_ICONS[animal.type] || '?';
       const isMatch = isMatchingAnimal(animal.x, animal.z);
 
       // Skip drawing if it's a matching animal during "off" phase of blink
       if (isMatch && !blinkVisible) return;
 
-      // Matching animals pulse larger
-      const baseRadius = animal.isFollowing ? 4 : 2.5;
-      const radius = isMatch ? baseRadius * blinkScale : baseRadius;
+      if (minimapDisplayMode === 'icons') {
+        // Draw emoji icon mode
+        const baseSize = animal.isFollowing ? 12 : 9;
+        const iconSize = isMatch ? baseSize * blinkScale : baseSize;
 
-      ctx.beginPath();
-      ctx.arc(pos.x, pos.y, radius, 0, Math.PI * 2);
-      ctx.fillStyle = color;
-      ctx.fill();
-
-      // Highlight following animals with green ring
-      if (animal.isFollowing) {
-        ctx.strokeStyle = '#00FF00';
-        ctx.lineWidth = 2;
-        ctx.stroke();
-      }
-
-      // Highlight matching animals with pulsing yellow/gold ring
-      if (isMatch && !animal.isFollowing) {
-        ctx.strokeStyle = '#FFD700';
-        ctx.lineWidth = 2;
-        ctx.stroke();
-
-        // Add outer glow effect
+        // Draw background circle for better visibility
         ctx.beginPath();
-        ctx.arc(pos.x, pos.y, radius + 3, 0, Math.PI * 2);
-        ctx.strokeStyle = `rgba(255, 215, 0, ${0.3 + blinkPhase * 0.4})`;
-        ctx.lineWidth = 2;
-        ctx.stroke();
+        ctx.arc(pos.x, pos.y, iconSize / 2 + 2, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+        ctx.fill();
+
+        // Highlight following animals with green ring
+        if (animal.isFollowing) {
+          ctx.strokeStyle = '#00FF00';
+          ctx.lineWidth = 2;
+          ctx.stroke();
+        }
+
+        // Highlight matching animals with pulsing yellow/gold ring
+        if (isMatch && !animal.isFollowing) {
+          ctx.strokeStyle = '#FFD700';
+          ctx.lineWidth = 2;
+          ctx.stroke();
+
+          // Add outer glow effect
+          ctx.beginPath();
+          ctx.arc(pos.x, pos.y, iconSize / 2 + 5, 0, Math.PI * 2);
+          ctx.strokeStyle = `rgba(255, 215, 0, ${0.3 + blinkPhase * 0.4})`;
+          ctx.lineWidth = 2;
+          ctx.stroke();
+        }
+
+        // Draw the emoji icon
+        ctx.font = `${iconSize}px serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(icon, pos.x, pos.y + 1); // +1 for vertical centering adjustment
+
+      } else {
+        // Original dot mode
+        const baseRadius = animal.isFollowing ? 4 : 2.5;
+        const radius = isMatch ? baseRadius * blinkScale : baseRadius;
+
+        ctx.beginPath();
+        ctx.arc(pos.x, pos.y, radius, 0, Math.PI * 2);
+        ctx.fillStyle = color;
+        ctx.fill();
+
+        // Highlight following animals with green ring
+        if (animal.isFollowing) {
+          ctx.strokeStyle = '#00FF00';
+          ctx.lineWidth = 2;
+          ctx.stroke();
+        }
+
+        // Highlight matching animals with pulsing yellow/gold ring
+        if (isMatch && !animal.isFollowing) {
+          ctx.strokeStyle = '#FFD700';
+          ctx.lineWidth = 2;
+          ctx.stroke();
+
+          // Add outer glow effect
+          ctx.beginPath();
+          ctx.arc(pos.x, pos.y, radius + 3, 0, Math.PI * 2);
+          ctx.strokeStyle = `rgba(255, 215, 0, ${0.3 + blinkPhase * 0.4})`;
+          ctx.lineWidth = 2;
+          ctx.stroke();
+        }
       }
     });
 
@@ -1004,13 +1074,49 @@
     border: 2px solid rgba(139, 90, 43, 0.8);
     border-radius: 8px;
     padding: 8px;
-    pointer-events: none;
+    pointer-events: auto;
+  }
+
+  .minimap-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid rgba(139, 90, 43, 0.4);
+  }
+
+  .minimap-title {
+    color: #DAA520;
+    font-size: 10px;
+    font-weight: bold;
+    letter-spacing: 1px;
+    text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
+  }
+
+  .minimap-toggle {
+    background: rgba(60, 40, 20, 0.7);
+    border: 1px solid rgba(139, 90, 43, 0.6);
+    border-radius: 4px;
+    padding: 2px 6px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .minimap-toggle:hover {
+    background: rgba(100, 70, 40, 0.8);
+    border-color: #DAA520;
+  }
+
+  .minimap-toggle:active {
+    transform: scale(0.95);
   }
 
   /* Remaining Animals Panel */
   .remaining-animals-container {
     position: absolute;
-    top: 295px;
+    top: 330px;
     right: 16px;
     width: 160px;
     background: rgba(0, 0, 0, 0.7);
@@ -1100,30 +1206,40 @@
   .minimap-legend {
     display: flex;
     justify-content: space-around;
-    font-size: 10px;
-    color: #888;
+    flex-wrap: wrap;
+    gap: 4px;
+    font-size: 9px;
+    color: #aaa;
     margin-top: 6px;
+    padding-top: 4px;
+    border-top: 1px solid rgba(139, 90, 43, 0.3);
   }
 
-  .legend-player::before {
-    content: '';
-    display: inline-block;
-    width: 8px;
-    height: 8px;
-    background: #00FF00;
-    border-radius: 50%;
-    margin-right: 4px;
-    vertical-align: middle;
+  .legend-player, .legend-ark, .legend-match {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    padding: 2px 4px;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 3px;
   }
 
-  .legend-ark::before {
-    content: '';
-    display: inline-block;
-    width: 10px;
-    height: 6px;
-    background: #FFD700;
-    margin-right: 4px;
-    vertical-align: middle;
+  .legend-player {
+    color: #00FF00;
+  }
+
+  .legend-ark {
+    color: #FFD700;
+  }
+
+  .legend-match {
+    color: #FFD700;
+    animation: legendPulse 1.5s ease-in-out infinite;
+  }
+
+  @keyframes legendPulse {
+    0%, 100% { opacity: 0.7; }
+    50% { opacity: 1; }
   }
 
   /* Match Arrows */
