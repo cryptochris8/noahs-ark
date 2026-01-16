@@ -1,0 +1,232 @@
+{
+  "achievements": [
+    {
+      "id": "first_pair",
+      "name": "First Steps",
+      "description": "Deliver your first animal pair",
+      "icon": "footprints",
+      "category": "milestone",
+      "points": 10,
+      "requirement": {
+        "type": "total_pairs",
+        "value": 1
+      }
+    },
+    {
+      "id": "pair_collector_10",
+      "name": "Animal Rescuer",
+      "description": "Deliver 10 pairs total",
+      "icon": "heart",
+      "category": "milestone",
+      "points": 25,
+      "requirement": {
+        "type": "total_pairs",
+        "value": 10
+      }
+    },
+    {
+      "id": "pair_collector_50",
+      "name": "Noah's Assistant",
+      "description": "Deliver 50 pairs total",
+      "icon": "star",
+      "category": "milestone",
+      "points": 75,
+      "requirement": {
+        "type": "total_pairs",
+        "value": 50
+      }
+    },
+    {
+      "id": "pair_collector_100",
+      "name": "Ark Master",
+      "description": "Deliver 100 pairs total",
+      "icon": "crown",
+      "category": "milestone",
+      "points": 150,
+      "requirement": {
+        "type": "total_pairs",
+        "value": 100
+      }
+    },
+    {
+      "id": "games_played_10",
+      "name": "Dedicated Player",
+      "description": "Play 10 games",
+      "icon": "gamepad",
+      "category": "milestone",
+      "points": 25,
+      "requirement": {
+        "type": "total_games",
+        "value": 10
+      }
+    },
+    {
+      "id": "games_won_5",
+      "name": "Winner",
+      "description": "Win 5 games",
+      "icon": "medal",
+      "category": "milestone",
+      "points": 50,
+      "requirement": {
+        "type": "total_wins",
+        "value": 5
+      }
+    },
+    {
+      "id": "games_won_25",
+      "name": "Champion",
+      "description": "Win 25 games",
+      "icon": "trophy",
+      "category": "milestone",
+      "points": 150,
+      "requirement": {
+        "type": "total_wins",
+        "value": 25
+      }
+    },
+    {
+      "id": "speed_demon",
+      "name": "Speed Demon",
+      "description": "Win a game in under 3 minutes",
+      "icon": "lightning",
+      "category": "single_game",
+      "points": 100,
+      "requirement": {
+        "type": "win_time",
+        "value": 180
+      }
+    },
+    {
+      "id": "perfect_run",
+      "name": "Perfect Run",
+      "description": "Win without drowning",
+      "icon": "shield",
+      "category": "single_game",
+      "points": 75,
+      "requirement": {
+        "type": "no_drowning",
+        "value": true
+      }
+    },
+    {
+      "id": "no_powerups",
+      "name": "Purist",
+      "description": "Win without using any power-ups",
+      "icon": "hand",
+      "category": "single_game",
+      "points": 100,
+      "requirement": {
+        "type": "no_powerups",
+        "value": true
+      }
+    },
+    {
+      "id": "all_powerups",
+      "name": "Power Player",
+      "description": "Use all 3 power-up types in one game",
+      "icon": "zap",
+      "category": "single_game",
+      "points": 50,
+      "requirement": {
+        "type": "all_powerups",
+        "value": ["speed_boots", "animal_magnet", "flood_freeze"]
+      }
+    },
+    {
+      "id": "close_call",
+      "name": "Close Call",
+      "description": "Win with flood above 80%",
+      "icon": "water",
+      "category": "single_game",
+      "points": 75,
+      "requirement": {
+        "type": "flood_level",
+        "value": 0.8
+      }
+    },
+    {
+      "id": "flawless",
+      "name": "Flawless Victory",
+      "description": "Win on Hard difficulty",
+      "icon": "fire",
+      "category": "single_game",
+      "points": 150,
+      "requirement": {
+        "type": "hard_mode",
+        "value": true
+      }
+    },
+    {
+      "id": "farm_friends",
+      "name": "Farm Friends",
+      "description": "Collect all farm animals in one game",
+      "icon": "barn",
+      "category": "animal",
+      "points": 75,
+      "requirement": {
+        "type": "collect_animals",
+        "value": ["sheep", "cow", "pig", "chicken", "horse", "donkey"]
+      }
+    },
+    {
+      "id": "exotic_collector",
+      "name": "Exotic Collector",
+      "description": "Collect penguin, flamingo, and ocelot in one game",
+      "icon": "globe",
+      "category": "animal",
+      "points": 100,
+      "requirement": {
+        "type": "collect_animals",
+        "value": ["penguin", "flamingo", "ocelot"]
+      }
+    },
+    {
+      "id": "sea_rescue",
+      "name": "Sea Rescue",
+      "description": "Collect crab, turtle, frog, and squid in one game",
+      "icon": "waves",
+      "category": "animal",
+      "points": 75,
+      "requirement": {
+        "type": "collect_animals",
+        "value": ["crab", "turtle", "frog", "squid"]
+      }
+    },
+    {
+      "id": "high_scorer",
+      "name": "High Scorer",
+      "description": "Score 5,000 points in one game",
+      "icon": "target",
+      "category": "score",
+      "points": 50,
+      "requirement": {
+        "type": "game_score",
+        "value": 5000
+      }
+    },
+    {
+      "id": "score_master",
+      "name": "Score Master",
+      "description": "Score 10,000 points in one game",
+      "icon": "award",
+      "category": "score",
+      "points": 100,
+      "requirement": {
+        "type": "game_score",
+        "value": 10000
+      }
+    },
+    {
+      "id": "leaderboard_entry",
+      "name": "On the Board",
+      "description": "Get on the leaderboard",
+      "icon": "list",
+      "category": "score",
+      "points": 75,
+      "requirement": {
+        "type": "leaderboard",
+        "value": true
+      }
+    }
+  ]
+}

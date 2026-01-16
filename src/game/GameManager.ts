@@ -18,6 +18,7 @@ import WeatherManager from './managers/WeatherManager';
 import PowerUpManager from './managers/PowerUpManager';
 import ScoreManager from './managers/ScoreManager';
 import LeaderboardManager, { type LeaderboardEntry } from './managers/LeaderboardManager';
+import AchievementManager, { type AchievementDefinition } from './managers/AchievementManager';
 import ArkGoalZone from './entities/ArkGoalZone';
 import AnimalEntity from './entities/AnimalEntity';
 
@@ -88,6 +89,7 @@ export default class GameManager {
   private _powerUpManager: PowerUpManager | null = null;
   private _scoreManager: ScoreManager | null = null;
   private _leaderboardManager: LeaderboardManager | null = null;
+  private _achievementManager: AchievementManager | null = null;
   private _arkGoalZone: ArkGoalZone | null = null;
   private _state: GameState = GameState.WAITING;
   private _difficulty: DifficultyKey = 'normal';
@@ -249,9 +251,15 @@ export default class GameManager {
     this._powerUpManager = new PowerUpManager(world);
     this._scoreManager = new ScoreManager(difficulty);
     this._leaderboardManager = new LeaderboardManager();
+    this._achievementManager = AchievementManager.instance;
 
     // Load leaderboard data
     this._leaderboardManager.load();
+
+    // Set up achievement unlock callback
+    this._achievementManager.onAchievementUnlock((playerId, playerName, achievement) => {
+      this._handleAchievementUnlock(playerId, playerName, achievement);
+    });
 
     // Connect managers for power-up effects
     this._powerUpManager.setFloodManager(this._floodManager);
@@ -277,6 +285,15 @@ export default class GameManager {
       // Notify animals to flee from the rising water
       if (this._animalManager) {
         this._animalManager.updateFloodLevel(height);
+      }
+
+      // Track flood progress for achievements
+      if (this._achievementManager && this._world) {
+        const floodProgress = height / max;
+        const players = GameServer.instance.playerManager.getConnectedPlayersByWorld(this._world);
+        for (const player of players) {
+          this._achievementManager.updateFloodProgress(player.id, floodProgress);
+        }
       }
 
       // Update weather based on flood progress
@@ -323,6 +340,11 @@ export default class GameManager {
       if (this._scoreManager && GameConfig.instance.scoring.enabled) {
         const points = this._scoreManager.awardPowerUpCollection(player);
         this._world?.chatManager.sendPlayerMessage(player, `+${points} points!`, '00FFAA');
+      }
+
+      // Track power-up usage for achievements
+      if (this._achievementManager) {
+        this._achievementManager.onPowerUpUsed(player.id, type);
       }
       // UI update will happen automatically through broadcastUIUpdate
     });
@@ -420,6 +442,14 @@ export default class GameManager {
       this._scoreManager.startGame(600); // 10 minute max game time for time bonus calculation
     }
 
+    // Start achievement tracking for this game session
+    if (this._achievementManager && this._world) {
+      const players = GameServer.instance.playerManager.getConnectedPlayersByWorld(this._world);
+      for (const player of players) {
+        this._achievementManager.startGameSession(player.id, this._difficulty);
+      }
+    }
+
     // Start UI update loop - reduced frequency for performance (1 second instead of 500ms)
     this._uiUpdateInterval = setInterval(() => this._broadcastUIUpdate(), 1000);
 
@@ -469,6 +499,11 @@ export default class GameManager {
         // Bonus pair - still award points but different message
         this._world?.chatManager.sendPlayerMessage(deliveryPlayer, `+${points} bonus points for extra ${displayName} pair!`, 'AAFFAA');
       }
+    }
+
+    // Track achievement progress
+    if (deliveryPlayer && this._achievementManager) {
+      this._achievementManager.onPairDelivered(deliveryPlayer.id, animalType);
     }
 
     // Broadcast success with appropriate message
@@ -541,6 +576,17 @@ export default class GameManager {
               player,
               `You made the leaderboard! Rank #${rank}`,
               'FFD700'
+            );
+          }
+
+          // Process achievements on game complete
+          if (this._achievementManager) {
+            const madeLeaderboard = rank !== null;
+            await this._achievementManager.onGameComplete(
+              player.id,
+              true, // victory
+              totalScore,
+              madeLeaderboard
             );
           }
         }
@@ -621,6 +667,17 @@ export default class GameManager {
               'FFD700'
             );
           }
+
+          // Process achievements on game complete (even on defeat for cumulative stats)
+          if (this._achievementManager) {
+            const madeLeaderboard = rank !== null;
+            await this._achievementManager.onGameComplete(
+              player.id,
+              false, // defeat
+              totalScore,
+              madeLeaderboard
+            );
+          }
         }
       }
     }
@@ -660,6 +717,11 @@ export default class GameManager {
     // Release any animals following this player
     if (this._animalManager) {
       this._animalManager.releaseAnimalsFromPlayer(player);
+    }
+
+    // Track drowning for achievements
+    if (this._achievementManager) {
+      this._achievementManager.onPlayerDrowned(player.id);
     }
 
     // Notify the player they drowned
@@ -913,6 +975,11 @@ export default class GameManager {
       this._scoreManager.registerPlayer(player);
     }
 
+    // Register player for achievements
+    if (this._achievementManager) {
+      this._achievementManager.registerPlayer(player);
+    }
+
     // Send initial game state
     this._sendUIUpdate(player);
 
@@ -950,6 +1017,11 @@ export default class GameManager {
     // Clean up score tracking
     if (this._scoreManager) {
       this._scoreManager.removePlayer(player.id);
+    }
+
+    // Save and clean up achievement data
+    if (this._achievementManager) {
+      this._achievementManager.removePlayer(player.id);
     }
 
     // PERFORMANCE: Clean up UI state cache
@@ -1032,6 +1104,43 @@ export default class GameManager {
    */
   private _broadcastMessage(message: string, color: string): void {
     this._world?.chatManager.sendBroadcastMessage(message, color);
+  }
+
+  /**
+   * Handle achievement unlock - send notification to player
+   */
+  private _handleAchievementUnlock(playerId: string, playerName: string, achievement: AchievementDefinition): void {
+    if (!this._world) return;
+
+    // Find the player
+    const players = GameServer.instance.playerManager.getConnectedPlayersByWorld(this._world);
+    const player = players.find(p => p.id === playerId);
+
+    if (player) {
+      // Send achievement unlock notification to player's UI
+      player.ui.sendData({
+        type: 'achievement-unlocked',
+        achievement: {
+          id: achievement.id,
+          name: achievement.name,
+          description: achievement.description,
+          icon: achievement.icon,
+          points: achievement.points,
+        },
+      });
+
+      // Also send chat message
+      this._world.chatManager.sendPlayerMessage(
+        player,
+        `Achievement Unlocked: ${achievement.name} (+${achievement.points} pts)`,
+        'FFD700'
+      );
+    }
+
+    // Broadcast to all players for rare achievements
+    if (achievement.points >= 100) {
+      this._broadcastMessage(`${playerName} unlocked: ${achievement.name}!`, 'FFD700');
+    }
   }
 
   /**

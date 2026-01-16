@@ -57,6 +57,27 @@
     </div>
   </div>
 
+  <!-- Achievement Unlock Toast -->
+  <div id="achievement-toast" class="achievement-toast hidden">
+    <div class="achievement-toast-content">
+      <div class="achievement-toast-header">
+        <span class="achievement-star">★</span>
+        <span class="achievement-toast-title">ACHIEVEMENT UNLOCKED!</span>
+        <span class="achievement-star">★</span>
+      </div>
+      <div class="achievement-toast-body">
+        <span id="achievement-icon" class="achievement-icon">🏆</span>
+        <div class="achievement-info">
+          <span id="achievement-name" class="achievement-name">Achievement Name</span>
+          <span id="achievement-desc" class="achievement-desc">Description</span>
+        </div>
+      </div>
+      <div class="achievement-toast-points">
+        <span id="achievement-points">+100 points</span>
+      </div>
+    </div>
+  </div>
+
   <!-- Match Arrows (screen-edge indicators) -->
   <div id="match-arrows-container" class="match-arrows-container"></div>
 
@@ -774,6 +795,47 @@
     }, duration);
   }
 
+  // Achievement icon mapping
+  const ACHIEVEMENT_ICONS = {
+    footprints: '👣', heart: '❤️', star: '⭐', crown: '👑',
+    gamepad: '🎮', medal: '🥈', trophy: '🏆', lightning: '⚡',
+    shield: '🛡️', hand: '✋', zap: '💥', water: '🌊',
+    fire: '🔥', barn: '🏠', globe: '🌍', waves: '🌊',
+    target: '🎯', award: '🏅', list: '📋'
+  };
+
+  // Show achievement toast notification
+  function showAchievementToast(achievement) {
+    const toast = document.getElementById('achievement-toast');
+    const iconEl = document.getElementById('achievement-icon');
+    const nameEl = document.getElementById('achievement-name');
+    const descEl = document.getElementById('achievement-desc');
+    const pointsEl = document.getElementById('achievement-points');
+
+    if (!toast || !iconEl || !nameEl || !descEl || !pointsEl) return;
+
+    // Set achievement details
+    iconEl.textContent = ACHIEVEMENT_ICONS[achievement.icon] || '🏆';
+    nameEl.textContent = achievement.name;
+    descEl.textContent = achievement.description;
+    pointsEl.textContent = `+${achievement.points} points`;
+
+    // Show toast with animation
+    toast.classList.remove('hidden');
+    toast.classList.add('show');
+
+    // Hide after 4 seconds
+    setTimeout(() => {
+      toast.classList.remove('show');
+      toast.classList.add('hide');
+
+      setTimeout(() => {
+        toast.classList.add('hidden');
+        toast.classList.remove('hide');
+      }, 500);
+    }, 4000);
+  }
+
   // Show game over screen
   function showGameOver(victory, stats) {
     if (victory) {
@@ -868,6 +930,8 @@
       showGameOver(data.victory, data);
     } else if (data.type === 'restart-countdown') {
       updateRestartCountdown(data.remainingSeconds);
+    } else if (data.type === 'achievement-unlocked') {
+      showAchievementToast(data.achievement);
     } else if (data.type === 'reset') {
       hideGameOver();
       hideRestartCountdown();
@@ -1893,6 +1957,137 @@
   .mobile-button.mobile-jump.active {
     background-color: rgba(100, 150, 255, 0.8);
     box-shadow: 0 0 12px rgba(100, 150, 255, 0.6);
+  }
+
+  /* Achievement Toast Notification */
+  .achievement-toast {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) scale(0.8);
+    z-index: 300;
+    opacity: 0;
+    pointer-events: none;
+    transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  }
+
+  .achievement-toast.hidden {
+    display: none;
+  }
+
+  .achievement-toast.show {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+
+  .achievement-toast.hide {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.8);
+  }
+
+  .achievement-toast-content {
+    background: linear-gradient(135deg, rgba(50, 30, 10, 0.98) 0%, rgba(80, 50, 20, 0.98) 100%);
+    border: 3px solid #FFD700;
+    border-radius: 16px;
+    padding: 20px 30px;
+    min-width: 320px;
+    max-width: 400px;
+    box-shadow:
+      0 0 30px rgba(255, 215, 0, 0.5),
+      0 0 60px rgba(255, 215, 0, 0.3),
+      0 10px 40px rgba(0, 0, 0, 0.5);
+    animation: achievementGlow 2s ease-in-out infinite;
+  }
+
+  @keyframes achievementGlow {
+    0%, 100% { box-shadow: 0 0 30px rgba(255, 215, 0, 0.5), 0 0 60px rgba(255, 215, 0, 0.3), 0 10px 40px rgba(0, 0, 0, 0.5); }
+    50% { box-shadow: 0 0 40px rgba(255, 215, 0, 0.7), 0 0 80px rgba(255, 215, 0, 0.5), 0 10px 40px rgba(0, 0, 0, 0.5); }
+  }
+
+  .achievement-toast-header {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 15px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid rgba(255, 215, 0, 0.4);
+  }
+
+  .achievement-star {
+    color: #FFD700;
+    font-size: 20px;
+    animation: starSpin 1s ease-in-out infinite;
+  }
+
+  @keyframes starSpin {
+    0%, 100% { transform: rotate(0deg) scale(1); }
+    50% { transform: rotate(180deg) scale(1.2); }
+  }
+
+  .achievement-toast-title {
+    color: #FFD700;
+    font-size: 14px;
+    font-weight: bold;
+    letter-spacing: 2px;
+    text-shadow: 0 0 10px rgba(255, 215, 0, 0.8);
+  }
+
+  .achievement-toast-body {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    margin-bottom: 15px;
+  }
+
+  .achievement-icon {
+    font-size: 48px;
+    filter: drop-shadow(0 0 10px rgba(255, 215, 0, 0.5));
+    animation: iconBounce 0.6s ease-out;
+  }
+
+  @keyframes iconBounce {
+    0% { transform: scale(0); }
+    50% { transform: scale(1.2); }
+    100% { transform: scale(1); }
+  }
+
+  .achievement-info {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+
+  .achievement-name {
+    color: #fff;
+    font-size: 22px;
+    font-weight: bold;
+    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
+  }
+
+  .achievement-desc {
+    color: #ccc;
+    font-size: 14px;
+    font-style: italic;
+  }
+
+  .achievement-toast-points {
+    text-align: center;
+    padding-top: 10px;
+    border-top: 2px solid rgba(255, 215, 0, 0.4);
+  }
+
+  .achievement-toast-points span {
+    color: #00FF00;
+    font-size: 18px;
+    font-weight: bold;
+    text-shadow: 0 0 10px rgba(0, 255, 0, 0.5);
+    animation: pointsPulse 1s ease-in-out infinite;
+  }
+
+  @keyframes pointsPulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
   }
 </style>
 
