@@ -13,6 +13,7 @@ import {
 } from 'hytopia';
 
 import GameConfig from '../GameConfig';
+import GameManager from '../GameManager';
 
 // Animal model URIs - using default Hytopia assets
 // All available animal models from @hytopia.com/assets
@@ -378,6 +379,15 @@ export default class AnimalEntity extends Entity {
   public override spawn(world: World, position: Vector3Like): void {
     super.spawn(world, position);
     this._startIdleWander();
+
+    // TAP-TO-INTERACT: Handle when player taps/clicks on this animal
+    // This is the SDK's recommended mobile-friendly interaction pattern
+    this.on(EntityEvent.INTERACT, ({ player }) => {
+      if (!player || !this.isSpawned) return;
+
+      // Delegate to GameManager for pickup logic (cooldowns, limits, sounds, etc.)
+      GameManager.instance.handleAnimalInteraction(player, this);
+    });
   }
 
   public override despawn(): void {

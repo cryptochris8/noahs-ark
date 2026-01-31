@@ -7,6 +7,7 @@ import {
   ColliderShape,
   CollisionGroup,
   Entity,
+  EntityEvent,
   BlockType,
   Audio,
   RigidBodyType,
@@ -14,10 +15,12 @@ import {
   type World,
   type Vector3Like,
   type QuaternionLike,
+  type Player,
 } from 'hytopia';
 
 import AnimalEntity from './AnimalEntity';
 import GameConfig from '../GameConfig';
+import GameManager from '../GameManager';
 
 export type PairCompletedCallback = (animalType: string, animal1: AnimalEntity, animal2: AnimalEntity) => void;
 export type WrongPairCallback = (animal: AnimalEntity) => void;
@@ -45,6 +48,7 @@ export default class ArkGoalZone {
   private _pairSuccessAudio: Audio;
   private _pairFailAudio: Audio;
   private _arkModelEntity: Entity | null = null;
+  private _deliveryMarkerEntity: Entity | null = null; // TAP-TO-INTERACT: Visible marker at drop-off
   private _modelUri: string | null;
   private _modelScale: number;
   private _modelOffset: Vector3Like;
@@ -138,6 +142,34 @@ export default class ArkGoalZone {
       const rotation = Quaternion.fromEuler(0, this._modelRotationY, 0);
       this._arkModelEntity.spawn(this._world, modelPosition, rotation);
     }
+
+    // TAP-TO-INTERACT: Create a visible, interactive delivery marker at the drop-off zone
+    // This checkpoint block is what players tap to deliver their animals
+    this._deliveryMarkerEntity = new Entity({
+      name: 'DeliveryMarker',
+      modelUri: 'models/environment/Gameplay/checkpoint-block.gltf', // Visible checkpoint marker
+      modelScale: 1.5, // Large enough to tap easily on mobile
+      modelLoopedAnimations: ['idle'], // Animate if available
+      rigidBodyOptions: {
+        type: RigidBodyType.FIXED,
+      },
+    });
+
+    // Position the marker at the drop-off zone, slightly above ground
+    const markerPosition = {
+      x: this._position.x,
+      y: this._position.y + 1, // Slightly above ground level
+      z: this._position.z,
+    };
+
+    this._deliveryMarkerEntity.spawn(this._world, markerPosition);
+
+    // TAP-TO-INTERACT: Handle when player taps/clicks on the delivery marker
+    this._deliveryMarkerEntity.on(EntityEvent.INTERACT, ({ player }) => {
+      if (!player) return;
+      // Delegate to GameManager for delivery logic
+      GameManager.instance.handleArkDelivery(player);
+    });
   }
 
   /**
@@ -153,6 +185,12 @@ export default class ArkGoalZone {
     if (this._arkModelEntity) {
       this._arkModelEntity.despawn();
       this._arkModelEntity = null;
+    }
+
+    // Despawn the delivery marker
+    if (this._deliveryMarkerEntity) {
+      this._deliveryMarkerEntity.despawn();
+      this._deliveryMarkerEntity = null;
     }
 
     this._animalsInZone.clear();
